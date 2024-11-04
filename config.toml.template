@@ -1,0 +1,25 @@
+[server]
+port = ":8433"
+enable_auth = true
+
+[auth]
+redis_url = "redis://localhost:31337"
+token_header = "Authorization"
+token_key_template = "auth:{course}:{student}"
+
+[database]
+dsn = "postgres://postgres:password@localhost:9432/postgres?sslmode=disable"
+
+[headers]
+required = [
+  { name = "X-SECRET", value = "Let me in!" },
+  { name = "X-What-Ever", value = "nooo"}
+]
+
+[events]
+start = "000_lab_start"
+finish = "100_lab_finish"
+
+[display]
+timestamp_format = "YYYY-MM-DD HH24:MI:SS"
+go_timestamp_format = "2006-01-02 15:04:05"
