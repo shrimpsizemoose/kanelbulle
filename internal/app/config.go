@@ -3,10 +3,18 @@ package app
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/shrimpsizemoose/trekker/logger"
+)
+
+type DatabaseType string
+
+const (
+	DBTypePostgres DatabaseType = "postgres"
+	DBTypeSQLite   DatabaseType = "sqlite"
 )
 
 type HeaderConfig struct {
@@ -32,8 +40,8 @@ type Config struct {
 	} `toml:"api"`
 
 	Database struct {
-		DSN           string `toml:"dsn"`
-		MigrationsDir string `toml:"migrations_dir"`
+		DSN  string `toml:"dsn"`
+		Type DatabaseType
 	} `toml:"database"`
 
 	Display struct {
@@ -68,6 +76,12 @@ func LoadConfig(path string) (*Config, error) {
 			err,
 			string(data),
 		)
+	}
+
+	if strings.HasPrefix(config.Database.DSN, "postgres") {
+		config.Database.Type = DBTypePostgres
+	} else {
+		config.Database.Type = DBTypeSQLite
 	}
 
 	if config.Server.Port == "" {
