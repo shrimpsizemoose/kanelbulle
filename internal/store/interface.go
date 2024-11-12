@@ -10,13 +10,9 @@ import (
 	"github.com/shrimpsizemoose/kanelbulle/internal/models"
 )
 
-type DBConfig struct {
-	DSN string
-}
-
 type ScoreStore interface {
 	Close() error
-	ApplyMigratons(dir string) error
+	ApplyMigrations(dir string) error
 
 	CreateEntry(entry *models.Entry) error
 	GetStudentFinishEvent(student, lab, course string) (*models.Entry, error)
@@ -28,6 +24,7 @@ type ScoreStore interface {
 	GetLabScore(lab, course string) (*models.LabScore, error)
 	FetchScoringStats(course, eventFinishType string) ([]models.ScoringResult, error)
 	// GetEventsByType(eventType string) ([]models.Entry, error)
+	GetDetailedStats(course, startEventType, finishEventType string, timestampFormat string, includeHumanDttm bool) ([]StatResult, error)
 }
 
 // BaseStore provides common functionality for different DB implementations

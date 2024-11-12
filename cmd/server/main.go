@@ -18,10 +18,6 @@ func main() {
 	}
 	defer service.Close()
 
-	if err := service.Store.ApplyMigrations("./migrations"); err != nil {
-		logger.Error.Fatalf("Failed to apply migrations: %v", err)
-	}
-
 	entryHandler := handlers.NewEntryHandler(service)
 
 	http.HandleFunc("POST /api/v1/{course}/analytics", entryHandler.HandleLabEvent)

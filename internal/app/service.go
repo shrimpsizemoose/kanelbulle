@@ -11,7 +11,7 @@ import (
 
 type Service struct {
 	Config *Config
-	Store  *store.Store
+	Store  store.ScoreStore
 	Auth   *Auth
 }
 
@@ -21,7 +21,7 @@ func NewService(configPath string) (*Service, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	store, err := store.NewStore(config.Database.DSN)
+	store, err := NewStore(config.Database.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init store: %w", err)
 	}
