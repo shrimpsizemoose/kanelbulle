@@ -11,8 +11,8 @@ import (
 type Grader struct {
 	LateDaysModifiers  map[int]int
 	DefaultLatePenalty float64
-	MaxLateDays       int
-	ExtraLatePenalty  int
+	MaxLateDays        int
+	ExtraLatePenalty   int
 }
 
 func (g *Grader) CalculateScore(baseScore int, deadline, submitTime int64) int {
@@ -34,7 +34,7 @@ func (g *Grader) CalculateScore(baseScore int, deadline, submitTime int64) int {
 		return int(float64(baseScore) * g.DefaultLatePenalty)
 	}
 
-	score := int(float64(baseScore) * g.DefaultLatePenalty) - g.ExtraLatePenalty
+	score := int(float64(baseScore)*g.DefaultLatePenalty) - g.ExtraLatePenalty
 	if score < 0 {
 		return 0
 	}
@@ -52,7 +52,8 @@ func ScoreForStudentLab(store store.ScoreStore, student, lab, course string) (in
 	}
 
 	// Get finish events
-	finishEvents, err := store.GetEventsByType("finish")
+	finishEvents, err := store.GetStudentFinishEvent(student, lab, course)
+
 	if err != nil {
 		return 0, fmt.Errorf("failed to get finish events: %w", err)
 	}
@@ -87,8 +88,8 @@ func ScoreForStudentLab(store store.ScoreStore, student, lab, course string) (in
 			3: -3,
 		},
 		DefaultLatePenalty: 0.7,
-		MaxLateDays:       5,
-		ExtraLatePenalty:  5,
+		MaxLateDays:        5,
+		ExtraLatePenalty:   5,
 	}
 
 	return grader.CalculateScore(labScore.BaseScore, labScore.Deadline, studentFinish.Timestamp), nil

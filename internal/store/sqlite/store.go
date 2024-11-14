@@ -14,7 +14,7 @@ type SQLiteStore struct {
 	store.BaseStore
 }
 
-func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
+func NewSQLiteStore(dsn, migrationsDir string) (*SQLiteStore, error) {
 	db, err := sqlx.Connect("sqlite3", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to sqlite: %w", err)
@@ -32,8 +32,7 @@ func NewSQLiteStore(dsn string) (*SQLiteStore, error) {
 		},
 	}}
 
-	// if err := s.ApplyMigrations("../../../migrations"); err != nil {
-	if err := s.ApplyMigrations("./migrations"); err != nil {
+	if err := s.ApplyMigrations(migrationsDir); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}

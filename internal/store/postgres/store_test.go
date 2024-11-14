@@ -15,7 +15,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/shrimpsizemoose/kanelbulle/internal/models"
-	"github.com/shrimpsizemoose/kanelbulle/internal/store"
 )
 
 // setupTestDB creates an in-memory Postgres database and initializes schema
@@ -40,7 +39,7 @@ func setupTestDB(t *testing.T) (*PostgresStore, func()) {
 	dsn, err := postgres.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 
-	s, err := NewPostgresStore(&store.DBConfig{DSN: dsn})
+	s, err := NewPostgresStore(dsn, "../../migrations")
 	require.NoError(t, err, "Failed to create store")
 
 	cleanup := func() {

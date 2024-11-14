@@ -15,13 +15,13 @@ type ScoreStore interface {
 	ApplyMigrations(dir string) error
 
 	CreateEntry(entry *models.Entry) error
-	GetStudentFinishEvent(student, lab, course string) (*models.Entry, error)
+	GetStudentFinishEvent(course, lab, student string) (*models.Entry, error)
 	ListEntries(course string) ([]models.Entry, error)
 
-	GetScoreOverride(student, lab, course string) (*models.ScoreOverride, error)
+	GetScoreOverride(course, lab, student string) (*models.ScoreOverride, error)
 	CreateScoreOverride(override models.ScoreOverride) error
 	ListScoreOverrides() ([]models.ScoreOverride, error)
-	GetLabScore(lab, course string) (*models.LabScore, error)
+	GetLabScore(course, lab string) (*models.LabScore, error)
 	FetchScoringStats(course, eventFinishType string) ([]models.ScoringResult, error)
 	// GetEventsByType(eventType string) ([]models.Entry, error)
 	GetDetailedStats(course, startEventType, finishEventType string, timestampFormat string, includeHumanDttm bool) ([]StatResult, error)
@@ -81,20 +81,20 @@ func (s *BaseStore) CreateEntry(entry *models.Entry) error {
 	return nil
 }
 
-func (s *BaseStore) GetStudentFinishEvent(student, lab, course string) (*models.Entry, error) {
+func (s *BaseStore) GetStudentFinishEvent(course, lab, student string) (*models.Entry, error) {
 	var entry models.Entry
 	query := s.Converter(`
         SELECT timestamp, event_type, lab, student, course, comment
         FROM entries
-        WHERE student = ?
-        AND lab = ?
-        AND course = ?
+        WHERE course = ?
+	        AND lab = ?
+	        AND student = ?
         AND event_type = '100_lab_finish'
         ORDER BY timestamp ASC
         LIMIT 1
     `)
 
-	err := s.DB.Get(&entry, query, student, lab, course)
+	err := s.DB.Get(&entry, query, course, lab, student)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -141,17 +141,17 @@ func (s *BaseStore) CreateScoreOverride(override models.ScoreOverride) error {
 	return nil
 }
 
-func (s *BaseStore) GetScoreOverride(student, lab, course string) (*models.ScoreOverride, error) {
+func (s *BaseStore) GetScoreOverride(course, lab, student string) (*models.ScoreOverride, error) {
 	var override models.ScoreOverride
 	query := s.Converter(`
 		SELECT student, lab, score, course, reason
 		FROM score_overrides
-		WHERE student = ?
-		AND lab = ?
-		AND course = ?
+		WHERE course = ?
+			AND lab = ?
+			AND student = ?
 	`)
 
-	err := s.DB.Get(&override, query, student, lab, course)
+	err := s.DB.Get(&override, query, course, lab, student)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -174,14 +174,14 @@ func (s *BaseStore) ListScoreOverrides() ([]models.ScoreOverride, error) {
 	return overrides, nil
 }
 
-func (s *BaseStore) GetLabScore(lab, course string) (*models.LabScore, error) {
+func (s *BaseStore) GetLabScore(course, lab string) (*models.LabScore, error) {
 	var score models.LabScore
 	query := s.Converter(`
 			SELECT deadline, lab, base_score, course
 			FROM lab_scores
-			WHERE lab = ? AND course = ?
+			WHERE course = ? AND lab = ?
 	`)
-	err := s.DB.Get(&score, query, lab, course)
+	err := s.DB.Get(&score, query, course, lab)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

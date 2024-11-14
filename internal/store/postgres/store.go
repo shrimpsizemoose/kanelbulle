@@ -15,7 +15,7 @@ type PostgresStore struct {
 	store.BaseStore
 }
 
-func NewPostgresStore(dsn string) (*PostgresStore, error) {
+func NewPostgresStore(dsn, migrationsDir string) (*PostgresStore, error) {
 	db, err := sqlx.Connect("postgres", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -32,7 +32,7 @@ func NewPostgresStore(dsn string) (*PostgresStore, error) {
 		},
 	}}
 
-	if err := s.ApplyMigrations("../../../migrations"); err != nil {
+	if err := s.ApplyMigrations(migrationsDir); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}

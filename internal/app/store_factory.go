@@ -17,9 +17,9 @@ func NewStore(dsn string) (store.ScoreStore, error) {
 
 	switch dbType {
 	case store.DBTypePostgres:
-		return postgres.NewPostgresStore(dsn)
+		return postgres.NewPostgresStore(dsn, "./migrations")
 	case store.DBTypeSQLite:
-		return sqlite.NewSQLiteStore(dsn)
+		return sqlite.NewSQLiteStore(dsn, "./migrations")
 	default:
 		return nil, fmt.Errorf("unable to determine database type from DSN: %s", dsn)
 	}

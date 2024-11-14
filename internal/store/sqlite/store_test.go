@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shrimpsizemoose/kanelbulle/internal/models"
-	"github.com/shrimpsizemoose/kanelbulle/internal/store"
 )
 
 // setupTestDB creates an in-memory SQLite database and initializes schema
@@ -44,18 +43,18 @@ func setupTestDB(t *testing.T) (*SQLiteStore, func()) {
 		PRIMARY KEY (lab, course)
 	);`
 
-	s, err := NewSQLiteStore(&store.DBConfig{
-		DSN: ":memory:",
-	})
+	s, err := NewSQLiteStore(":memory:", "../../../migrations")
 	require.NoError(t, err, "Failed to create store")
 
 	_, err = s.DB.Exec(schema)
 	require.NoError(t, err, "Failed to create schema")
 
-	return s, func() {
+	cleanup := func() {
 		err := s.Close()
 		require.NoError(t, err, "Failed to close database")
 	}
+
+	return s, cleanup
 }
 
 type testData struct {
@@ -111,7 +110,7 @@ func TestCreateAndGetEntry(t *testing.T) {
 	})
 
 	t.Run("get entry", func(t *testing.T) {
-		got, err := td.store.GetStudentFinishEvent(entry.Student, entry.Lab, entry.Course)
+		got, err := td.store.GetStudentFinishEvent(entry.Course, entry.Lab, entry.Student)
 		require.NoError(t, err, "Failed to get entry")
 		require.NotNil(t, got)
 		assert.Equal(t, entry.Timestamp, got.Timestamp)
@@ -151,7 +150,7 @@ func TestGetStudentFinishEvent(t *testing.T) {
 	}
 
 	t.Run("get existing finish event", func(t *testing.T) {
-		got, err := td.store.GetStudentFinishEvent("john.doe", "l1", "cs101")
+		got, err := td.store.GetStudentFinishEvent("cs101", "l1", "john.doe")
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, entries[1].Timestamp, got.Timestamp)
@@ -159,7 +158,7 @@ func TestGetStudentFinishEvent(t *testing.T) {
 	})
 
 	t.Run("get non-existent event", func(t *testing.T) {
-		got, err := td.store.GetStudentFinishEvent("not.exists", "l1", "cs101")
+		got, err := td.store.GetStudentFinishEvent("cs101", "11", "not.exists")
 		require.NoError(t, err)
 		assert.Nil(t, got)
 	})
@@ -183,7 +182,7 @@ func TestScoreOverrideOperations(t *testing.T) {
 	})
 
 	t.Run("get override", func(t *testing.T) {
-		got, err := td.store.GetScoreOverride(override.Student, override.Lab, override.Course)
+		got, err := td.store.GetScoreOverride(override.Course, override.Lab, override.Student)
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, override.Score, got.Score)
@@ -203,7 +202,7 @@ func TestLabScoreOperations(t *testing.T) {
 	defer cleanup()
 
 	t.Run("get existing score", func(t *testing.T) {
-		score, err := td.store.GetLabScore("l1", "cs101")
+		score, err := td.store.GetLabScore("cs101", "l1")
 		require.NoError(t, err)
 		require.NotNil(t, score)
 		assert.Equal(t, 10, score.BaseScore)
