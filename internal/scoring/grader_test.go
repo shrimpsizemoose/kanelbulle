@@ -166,3 +166,56 @@ func TestGrader_CalculateScore(t *testing.T) {
 		})
 	}
 }
+
+func TestGrader_ScoreForStudent(t *testing.T) {
+	store := new(MockStore)
+	grader := NewGrader(
+		store,
+		map[int]int{1: -1, 2: -2, 3: -3},
+		0.7,
+		5,
+		5,
+	)
+
+	deadline := time.Date(2024, 4, 1, 23, 59, 59, 0, time.UTC)
+
+	t.Run("with score override", func(t *testing.T) {
+		store.On("GetScoreOverride", "course1", "lab1", "student1").
+			Return(&models.ScoreOverride{Score: 12}, nil).Once()
+
+		score, err := grader.ScoreForStudent("course1", "lab1", "student1")
+		assert.NoError(t, err)
+		assert.Equal(t, 12, score)
+	})
+
+	t.Run("late submission (23 hours)", func(t *testing.T) {
+		submitTime := deadline.Add(23 * time.Hour)
+		store.On("GetScoreOverride", "course1", "lab1", "student2").
+			Return(nil, nil).Once()
+		store.On("GetStudentFinishEvent", "course1", "lab1", "student2").
+			Return(&models.Entry{Timestamp: submitTime.Unix()}, nil).Once()
+		store.On("GetLabScore", "course1", "lab1").
+			Return(&models.LabScore{BaseScore: 10, Deadline: deadline.Unix()}, nil).Once()
+
+		score, err := grader.ScoreForStudent("course1", "lab1", "student2")
+		assert.NoError(t, err)
+		assert.Equal(t, 9, score) // -1 за первый день просрочки
+	})
+
+	t.Run("late submission (24h1m)", func(t *testing.T) {
+		submitTime := deadline.Add(24*time.Hour + 1*time.Minute)
+		store.On("GetScoreOverride", "course1", "lab1", "student3").
+			Return(nil, nil).Once()
+		store.On("GetStudentFinishEvent", "course1", "lab1", "student3").
+			Return(&models.Entry{Timestamp: submitTime.Unix()}, nil).Once()
+		store.On("GetLabScore", "course1", "lab1").
+			Return(&models.LabScore{BaseScore: 10, Deadline: deadline.Unix()}, nil).Once()
+
+		score, err := grader.ScoreForStudent("course1", "lab1", "student3")
+		assert.NoError(t, err)
+		assert.Equal(t, 8, score) // -2 за второй день просрочки
+	})
+
+	store.AssertExpectations(t)
+
+}

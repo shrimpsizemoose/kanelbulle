@@ -31,7 +31,7 @@ func (g *Grader) CalculateScore(baseScore int, deadline, submitTime int64) int {
 		return baseScore
 	}
 
-	deltaDays := int(math.Ceil(float64(submitTime-deadline) / float64(24*60*60)))
+	lateDays := int(math.Ceil(float64(submitTime-deadline) / float64(24*60*60)))
 
 	clamp := func(score int) int {
 		if score < 0 {
@@ -40,11 +40,11 @@ func (g *Grader) CalculateScore(baseScore int, deadline, submitTime int64) int {
 		return score
 	}
 
-	if modifier, exists := g.lateDaysModifiers[deltaDays]; exists {
+	if modifier, exists := g.lateDaysModifiers[lateDays]; exists {
 		return clamp(baseScore + modifier)
 	}
 
-	if deltaDays <= g.maxLateDays {
+	if lateDays <= g.maxLateDays {
 		return clamp(int(float64(baseScore) * g.defaultLatePenalty))
 	}
 
