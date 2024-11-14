@@ -6,6 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shrimpsizemoose/trekker/logger"
+
+	"github.com/shrimpsizemoose/kanelbulle/internal/metrics"
 	"github.com/shrimpsizemoose/kanelbulle/internal/scoring"
 	"github.com/shrimpsizemoose/kanelbulle/internal/store"
 )
@@ -62,7 +65,7 @@ type LabStats struct {
 }
 
 func (s *Service) ValidateAuthAndStudent(r *http.Request, course, student string) error {
-	if !s.Config.Server.EnableAuth {
+	if !s.Config.Auth.Enabled {
 		return nil
 	}
 
@@ -86,17 +89,30 @@ func (s *Service) ValidateHeaders(headers map[string][]string) bool {
 }
 
 func (s *Service) GetScoring(course string) (map[string]map[string]int, error) {
-	results, err := s.Store.FetchScoringStats(course, s.Config.Events.Finish)
+	finishEvents, err := s.Store.GetCourseEventsByType(course, "100_lab_finish")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get scoring stats: %w", err)
+		return nil, fmt.Errorf("failed to get entries: %w", err)
 	}
 
 	scores := make(map[string]map[string]int)
-	for _, result := range results {
-		if scores[result.Student] == nil {
-			scores[result.Student] = make(map[string]int)
+
+	for _, entry := range finishEvents {
+		if scores[entry.Student] == nil {
+			scores[entry.Student] = make(map[string]int)
 		}
-		scores[result.Student][result.Lab] = result.Score
+		score, err := s.Grader.ScoreForStudent(course, entry.Lab, entry.Student)
+		if err != nil {
+			logger.Error.Printf("failed to calculate score for student %s lab %s: %v",
+				entry.Student,
+				entry.Lab,
+				err,
+			)
+			continue
+		}
+
+		scores[entry.Student][entry.Lab] = score
+
+		metrics.LabScoreHistogram.WithLabelValues(course, entry.Lab).Observe(float64(score))
 	}
 
 	return scores, nil

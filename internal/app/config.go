@@ -16,11 +16,11 @@ type HeaderConfig struct {
 
 type Config struct {
 	Server struct {
-		Port       string `toml:"port"`
-		EnableAuth bool   `toml:"enable_auth"`
+		Port string `toml:"port"`
 	} `toml:"server"`
 
 	Auth struct {
+		Enabled          bool   `toml:"enabled"`
 		RedisURL         string `toml:"redis_url"`
 		TokenHeader      string `toml:"token_header"`
 		TokenKeyTemplate string `toml:"token_key_template"`

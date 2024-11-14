@@ -39,7 +39,7 @@ func setupTestDB(t *testing.T) (*PostgresStore, func()) {
 	dsn, err := postgres.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 
-	s, err := NewPostgresStore(dsn, "../../migrations")
+	s, err := NewPostgresStore(dsn, "../../../migrations")
 	require.NoError(t, err, "Failed to create store")
 
 	cleanup := func() {
@@ -210,30 +210,5 @@ func TestLabScoreOperations(t *testing.T) {
 		score, err := td.store.GetLabScore("not.exists", "cs101")
 		require.NoError(t, err)
 		assert.Nil(t, score)
-	})
-}
-
-func TestFetchScoringStats(t *testing.T) {
-	td, cleanup := setupTestData(t)
-	defer cleanup()
-
-	entry := models.Entry{
-		Timestamp: td.now.Unix(),
-		EventType: "100_lab_finish",
-		Lab:       "l1",
-		Student:   "john.doe",
-		Course:    "cs101",
-	}
-
-	err := td.store.CreateEntry(&entry)
-	require.NoError(t, err)
-
-	t.Run("fetch stats", func(t *testing.T) {
-		stats, err := td.store.FetchScoringStats("cs101", "100_lab_finish")
-		require.NoError(t, err)
-		require.Len(t, stats, 1)
-		assert.Equal(t, "john.doe", stats[0].Student)
-		assert.Equal(t, "l1", stats[0].Lab)
-		assert.Equal(t, 10, stats[0].Score) // base score from lab_scores
 	})
 }

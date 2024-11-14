@@ -22,8 +22,7 @@ type ScoreStore interface {
 	CreateScoreOverride(override models.ScoreOverride) error
 	ListScoreOverrides() ([]models.ScoreOverride, error)
 	GetLabScore(course, lab string) (*models.LabScore, error)
-	FetchScoringStats(course, eventFinishType string) ([]models.ScoringResult, error)
-	// GetEventsByType(eventType string) ([]models.Entry, error)
+	GetCourseEventsByType(course, eventType string) ([]models.Entry, error)
 	GetDetailedStats(course, startEventType, finishEventType string, timestampFormat string, includeHumanDttm bool) ([]StatResult, error)
 }
 
@@ -189,4 +188,24 @@ func (s *BaseStore) GetLabScore(course, lab string) (*models.LabScore, error) {
 		return nil, fmt.Errorf("failed to get lab score: %w", err)
 	}
 	return &score, nil
+}
+
+func (s *BaseStore) GetCourseEventsByType(course, eventType string) ([]models.Entry, error) {
+	var entries []models.Entry
+	query := s.Converter(`
+		SELECT timestamp, event_type, lab, student, course, comment
+		FROM entries
+		WHERE course = ? AND event_type = ?
+		ORDER BY student, lab, timestamp ASC
+	`)
+
+	err := s.DB.Select(&entries, query, course, eventType)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get course events: %w", err)
+	}
+
+	return entries, nil
 }

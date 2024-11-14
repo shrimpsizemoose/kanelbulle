@@ -63,7 +63,7 @@ func (m *MockStore) GetLabScore(course, lab string) (*models.LabScore, error) {
 	return args.Get(0).(*models.LabScore), args.Error(1)
 }
 
-func (m *MockStore) FetchScoringStats(course, eventFinishType string) ([]models.ScoringResult, error) {
+func (m *MockStore) GetCourseEventsByType(course, eventType string) ([]models.Entry, error) {
 	return nil, nil
 }
 

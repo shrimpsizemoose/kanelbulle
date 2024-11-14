@@ -25,7 +25,7 @@ type Auth struct {
 }
 
 func NewAuth(config *Config) (*Auth, error) {
-	if !config.Server.EnableAuth {
+	if !config.Auth.Enabled {
 		return &Auth{enabled: false}, nil
 	}
 

@@ -6,7 +6,6 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/shrimpsizemoose/kanelbulle/internal/models"
 	"github.com/shrimpsizemoose/kanelbulle/internal/store"
 )
 
@@ -66,34 +65,6 @@ func (s *SQLiteStore) ApplyMigrations(dir string) error {
 	}
 
 	return s.BaseStore.ApplyMigrations(dir, translateToSQLite)
-}
-
-// Fetch Scoring stats for given event type
-func (s *SQLiteStore) FetchScoringStats(course, eventType string) ([]models.ScoringResult, error) {
-	query := `
-		WITH lab_finishes AS (
-			SELECT student, lab, MIN(timestamp) as first_finish
-			FROM entries
-			WHERE event_type = ?
-			AND course = ?
-			GROUP BY student, lab
-		)
-		SELECT 
-			f.student,
-			f.lab,
-			s.base_score as score
-		FROM lab_finishes f
-		JOIN lab_scores s ON s.lab = f.lab AND s.course = ?
-		ORDER BY f.student, f.lab
-	`
-
-	var results []models.ScoringResult
-	err := s.DB.Select(&results, query, eventType, course, course)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get scoring stats: %w", err)
-	}
-
-	return results, nil
 }
 
 func (s *SQLiteStore) GetDetailedStats(course, startEventType, finishEventType string, timestampFormat string, includeHumanDttm bool) ([]store.StatResult, error) {
