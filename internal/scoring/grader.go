@@ -4,46 +4,53 @@ package scoring
 import (
 	"fmt"
 
-	"github.com/shrimpsizemoose/kanelbulle/internal/models"
 	"github.com/shrimpsizemoose/kanelbulle/internal/store"
 )
 
 type Grader struct {
-	LateDaysModifiers  map[int]int
-	DefaultLatePenalty float64
-	MaxLateDays        int
-	ExtraLatePenalty   int
+	store              store.ScoreStore
+	lateDaysModifiers  map[int]int
+	defaultLatePenalty float64
+	maxLateDays        int
+	extraLatePenalty   int
+}
+
+func NewGrader(store store.ScoreStore, lateDaysModifiers map[int]int, defaultPenalty float64, maxLateDays, extraPenalty int) *Grader {
+	return &Grader{
+		store:              store,
+		lateDaysModifiers:  lateDaysModifiers,
+		defaultLatePenalty: defaultPenalty,
+		maxLateDays:        maxLateDays,
+		extraLatePenalty:   extraPenalty,
+	}
 }
 
 func (g *Grader) CalculateScore(baseScore int, deadline, submitTime int64) int {
-	deltaDays := int((submitTime - deadline) / (24 * 60 * 60))
-
-	if deltaDays <= 0 {
+	if submitTime <= deadline {
 		return baseScore
 	}
 
-	if modifier, exists := g.LateDaysModifiers[deltaDays]; exists {
-		score := baseScore + modifier
+	deltaDays := int((submitTime - deadline) / (24 * 60 * 60))
+	clamp := func(score int) int {
 		if score < 0 {
 			return 0
 		}
 		return score
 	}
 
-	if deltaDays <= g.MaxLateDays {
-		return int(float64(baseScore) * g.DefaultLatePenalty)
+	if modifier, exists := g.lateDaysModifiers[deltaDays]; exists {
+		return clamp(baseScore + modifier)
 	}
 
-	score := int(float64(baseScore)*g.DefaultLatePenalty) - g.ExtraLatePenalty
-	if score < 0 {
-		return 0
+	if deltaDays <= g.maxLateDays {
+		return clamp(int(float64(baseScore) * g.defaultLatePenalty))
 	}
-	return score
+
+	return clamp(int(float64(baseScore)*g.defaultLatePenalty) - g.extraLatePenalty)
 }
 
-func ScoreForStudentLab(store store.ScoreStore, student, lab, course string) (int, error) {
-	// First check for manual override
-	override, err := store.GetScoreOverride(student, lab, course)
+func (g *Grader) ScoreForStudent(course, lab, student string) (int, error) {
+	override, err := g.store.GetScoreOverride(course, lab, student)
 	if err != nil {
 		return 0, fmt.Errorf("failed to check score override: %w", err)
 	}
@@ -51,46 +58,22 @@ func ScoreForStudentLab(store store.ScoreStore, student, lab, course string) (in
 		return override.Score, nil
 	}
 
-	// Get finish events
-	finishEvents, err := store.GetStudentFinishEvent(student, lab, course)
+	finishEvent, err := g.store.GetStudentFinishEvent(course, lab, student)
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to get finish events: %w", err)
 	}
-
-	var studentFinish *models.Entry
-	for _, event := range finishEvents {
-		if event.Student == student && event.Lab == lab && event.Course == course {
-			studentFinish = &event
-			break
-		}
+	if finishEvent == nil {
+		return 0, err
 	}
 
-	if studentFinish == nil {
-		return 0, nil // No finish event found
-	}
-
-	// Get lab score configuration
-	labScore, err := store.GetLabScore(lab, course)
+	labScore, err := g.store.GetLabScore(course, lab)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get lab score: %w", err)
+		return 0, err
 	}
 	if labScore == nil {
 		return 0, nil
 	}
 
-	// Create grader with default configuration
-	// Note: In production, this should come from configuration
-	grader := &Grader{
-		LateDaysModifiers: map[int]int{
-			1: -1,
-			2: -2,
-			3: -3,
-		},
-		DefaultLatePenalty: 0.7,
-		MaxLateDays:        5,
-		ExtraLatePenalty:   5,
-	}
-
-	return grader.CalculateScore(labScore.BaseScore, labScore.Deadline, studentFinish.Timestamp), nil
+	return g.CalculateScore(labScore.BaseScore, labScore.Deadline, finishEvent.Timestamp), nil
 }
