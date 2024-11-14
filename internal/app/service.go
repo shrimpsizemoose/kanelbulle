@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shrimpsizemoose/kanelbulle/internal/scoring"
 	"github.com/shrimpsizemoose/kanelbulle/internal/store"
 )
 
@@ -13,6 +14,7 @@ type Service struct {
 	Config *Config
 	Store  store.ScoreStore
 	Auth   *Auth
+	Grader *scoring.Grader
 }
 
 func NewService(configPath string) (*Service, error) {
@@ -31,10 +33,19 @@ func NewService(configPath string) (*Service, error) {
 		return nil, fmt.Errorf("failed to init auth: %w", err)
 	}
 
+	grader := scoring.NewGrader(
+		store,
+		config.Scoring.LateDaysModifiers,
+		config.Scoring.DefaultLatePenalty,
+		config.Scoring.MaxLateDays,
+		config.Scoring.ExtraLatePenalty,
+	)
+
 	return &Service{
 		Config: config,
 		Store:  store,
 		Auth:   auth,
+		Grader: grader,
 	}, nil
 }
 
