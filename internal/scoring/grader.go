@@ -3,6 +3,7 @@ package scoring
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/shrimpsizemoose/kanelbulle/internal/store"
 )
@@ -30,7 +31,8 @@ func (g *Grader) CalculateScore(baseScore int, deadline, submitTime int64) int {
 		return baseScore
 	}
 
-	deltaDays := int((submitTime - deadline) / (24 * 60 * 60))
+	deltaDays := int(math.Ceil(float64(submitTime-deadline) / float64(24*60*60)))
+
 	clamp := func(score int) int {
 		if score < 0 {
 			return 0
