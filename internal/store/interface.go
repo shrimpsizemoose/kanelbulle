@@ -20,8 +20,11 @@ type ScoreStore interface {
 
 	GetScoreOverride(course, lab, student string) (*models.ScoreOverride, error)
 	CreateScoreOverride(override models.ScoreOverride) error
-	ListScoreOverrides() ([]models.ScoreOverride, error)
+	ListCourseScoreOverrides(course string) ([]models.ScoreOverride, error)
+
+	CreateLabScore(labScore models.LabScore) error
 	GetLabScore(course, lab string) (*models.LabScore, error)
+	ListLabScores(course string) ([]models.LabScore, error)
 	GetCourseEventsByType(course, eventType string) ([]models.Entry, error)
 	GetDetailedStats(course, startEventType, finishEventType string, timestampFormat string, includeHumanDttm bool) ([]StatResult, error)
 }
@@ -160,17 +163,33 @@ func (s *BaseStore) GetScoreOverride(course, lab, student string) (*models.Score
 	return &override, nil
 }
 
-func (s *BaseStore) ListScoreOverrides() ([]models.ScoreOverride, error) {
+func (s *BaseStore) ListCourseScoreOverrides(course string) ([]models.ScoreOverride, error) {
 	var overrides []models.ScoreOverride
-	err := s.DB.Select(&overrides, `
+	query := s.Converter(`
 		SELECT student, lab, score, course, reason 
 		FROM score_overrides 
+		WHERE course = ?
 		ORDER BY course, lab, student
 	`)
+	err := s.DB.Select(&overrides, query, course)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list score overrides: %w", err)
 	}
 	return overrides, nil
+}
+
+func (s *BaseStore) CreateLabScore(labScore models.LabScore) error {
+	_, err := s.DB.NamedExec(`
+		INSERT INTO lab_scores (deadline, lab, base_score, course)
+		VALUES (:deadline, :lab, :base_score, :course)
+		ON CONFLICT(course, lab) DO UPDATE SET
+		base_score = :base_score,
+		deadline = :deadline
+	`, labScore)
+	if err != nil {
+		return fmt.Errorf("failed to register lab score: %w", err)
+	}
+	return nil
 }
 
 func (s *BaseStore) GetLabScore(course, lab string) (*models.LabScore, error) {
@@ -188,6 +207,27 @@ func (s *BaseStore) GetLabScore(course, lab string) (*models.LabScore, error) {
 		return nil, fmt.Errorf("failed to get lab score: %w", err)
 	}
 	return &score, nil
+}
+
+func (s *BaseStore) ListLabScores(course string) ([]models.LabScore, error) {
+	var labScores []models.LabScore
+	query := s.Converter(`
+		SELECT
+			deadline,
+			lab,
+			base_score,
+			course
+		FROM lab_scores
+		WHERE course = ?
+		ORDER BY lab ASC
+	`)
+
+	err := s.DB.Select(&labScores, query, course)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch lab scores: %w", err)
+	}
+
+	return labScores, nil
 }
 
 func (s *BaseStore) GetCourseEventsByType(course, eventType string) ([]models.Entry, error) {
