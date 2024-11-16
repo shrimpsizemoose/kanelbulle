@@ -8,6 +8,12 @@ import (
 )
 
 type Config struct {
+	Auth struct {
+		Enabled          bool   `toml:"enabled"`
+		RedisURL         string `toml:"redis_url"`
+		TokenHeader      string `toml:"token_header"`
+		TokenKeyTemplate string `toml:"token_key_template"`
+	} `toml:"auth"`
 	Bot struct {
 		Token    string  `toml:"token"`
 		AdminIDs []int64 `toml:"admin_ids"`

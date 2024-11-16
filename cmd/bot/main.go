@@ -38,7 +38,7 @@ func main() {
 		logger.Error.Fatalf("Failed to create bot: %v", err)
 	}
 
-	logger.Info.Println("Starting bot...")
+	logger.Info.Println("Bot intialized succesfully")
 	if err := b.Start(); err != nil {
 		logger.Error.Fatalf("Bot error: %v", err)
 	}

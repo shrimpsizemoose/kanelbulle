@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,6 +14,8 @@ import (
 )
 
 const (
+	operationTimeout = 5 * time.Second
+
 	studentHelp = `Доступные команды:
 /token - Получить токен для доступа к API
 /help - Показать это сообщение`
@@ -23,13 +26,18 @@ const (
 /lab list <course> - Список лабораторных работ
 /override set <course> <student> <lab> score <score> reason <reason> - Установить оценку вручную
 /override list <course> - Список текущих оверрайдов
+/set_course <course> [comment] - Привязать чат к какому-то курсу
+/map_student @username <student.name> - Привязать телеграмный айдишник к student.id
 /help - Показать это сообщение
 
 Примеры:
 /lab add DE15 01s score 10 deadline "2024-12-01"
 /lab list DE15
 /override set DE15 01s student.name score 8 reason "Late submission accepted"
-/override list DE15`
+/override list DE15
+/map_student @karkarkar kaggi.kar
+/set_course DE15 "Дамокловы Экивоки 14+"
+`
 )
 
 type commandHandler func(*tgbotapi.Message) error
@@ -37,7 +45,7 @@ type commandHandler func(*tgbotapi.Message) error
 func (b *Bot) routeStudentCommands(cmd string) (commandHandler, bool) {
 	commands := map[string]commandHandler{
 		"start": b.handleStart,
-		"token": b.handleToken,
+		"token": b.handleTokenCommand,
 		"help":  b.handleHelp,
 	}
 	handler, found := commands[cmd]
@@ -46,8 +54,10 @@ func (b *Bot) routeStudentCommands(cmd string) (commandHandler, bool) {
 
 func (b *Bot) routeAdminCommands(cmd string) (commandHandler, bool) {
 	commands := map[string]commandHandler{
-		"lab":      b.handleLab,
-		"override": b.handleOverride,
+		"lab":         b.handleLab,
+		"override":    b.handleOverride,
+		"set_course":  b.handleSetCourseCommand,
+		"map_student": b.handleMapStudentCommand,
 	}
 	handler, found := commands[cmd]
 	return handler, found
@@ -108,9 +118,65 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) error {
 	return b.sendMessage(msg.Chat.ID, text)
 }
 
-func (b *Bot) handleToken(msg *tgbotapi.Message) error {
-	// TODO: Генерация и сохранение токена в Redis
+func (b *Bot) handleTokenCommand(msg *tgbotapi.Message) error {
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
+	defer cancel()
+
+	mapping, err := b.tokenManager.FetchCourseMappingByChatID(ctx, msg.Chat.ID)
+	if err != nil {
+		return fmt.Errorf("failed to determine course: %w", err)
+	}
+
+	studentID, err := b.tokenManager.FetchStudentIDByTelegram(ctx, mapping.Course, msg.From.UserName)
+	if err != nil {
+		return fmt.Errorf("failed to get student ID: %w", err)
+	}
+
+	tokenInfo, isNewToken, err := b.tokenManager.FetchOrCreateStudentToken(ctx, mapping.Course, studentID)
+	if err != nil {
+		return fmt.Errorf("failed to get/create token: %w", err)
+	}
+
+	if isNewToken {
+		go b.notifyAdminsAboutNewToken(mapping.Course, studentID, tokenInfo.Token)
+	}
+
+	text := fmt.Sprintf(
+		"Токен для курса %s:\n%s\nstudent: %s",
+		mapping.Course,
+		tokenInfo.Token,
+		studentID,
+	)
+
+	if err := b.sendMessage(msg.From.ID, text); err != nil {
+		return fmt.Errorf("failed to send token: %w", err)
+	}
+
+	if msg.Chat.Type != "private" {
+		delMsg := tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID)
+		if _, err := b.api.Request(delMsg); err != nil {
+			return fmt.Errorf("failed to delete message: %w", err)
+		}
+	}
+
 	return nil
+}
+
+func (b *Bot) notifyAdminsAboutNewToken(course, student, token string) {
+	message := fmt.Sprintf(
+		"🔐 New token created\nCourse: %s\nStudent: %s\nToken: %s",
+		course,
+		student,
+		token,
+	)
+
+	for _, adminID := range b.config.Bot.AdminIDs {
+		go func(id int64) {
+			if err := b.sendMessage(id, message); err != nil {
+				logger.Error.Printf("Failed to notify admin %d: %v", id, err)
+			}
+		}(adminID)
+	}
 }
 
 func (b *Bot) handleLab(msg *tgbotapi.Message) error {
@@ -234,7 +300,6 @@ func (b *Bot) handleLabList(chatID int64, course string) error {
 }
 
 func (b *Bot) handleOverride(msg *tgbotapi.Message) error {
-	// Пример: /override set DE15 student.name lab01 --score 8 --reason "Late submission"
 	args := strings.Fields(msg.CommandArguments())
 	if len(args) < 1 {
 		return b.sendMessage(msg.Chat.ID, "Использование:\n"+
@@ -335,6 +400,147 @@ func (b *Bot) handleOverrideList(chatID int64, course string) error {
 	}
 
 	return b.sendMessage(chatID, msg.String())
+}
+
+func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
+	args := strings.SplitN(msg.CommandArguments(), " ", 2)
+	if len(args) < 1 {
+		return fmt.Errorf("использование: /set_course <course> [comment]")
+	}
+
+	course := strings.TrimSpace(args[0])
+	comment := ""
+	if len(args) > 1 {
+		comment = strings.Trim(strings.TrimSpace(args[1]), `"'`)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
+	defer cancel()
+
+	mapping := &models.ChatCourseMapping{
+		Course:          course,
+		Name:            msg.Chat.Title,
+		Comment:         comment,
+		AssociationTime: time.Now().UTC(),
+		RegisteredBy:    msg.From.ID,
+	}
+
+	if err := b.tokenManager.AssociateChatWithCourse(ctx, msg.Chat.ID, mapping); err != nil {
+		return fmt.Errorf("Не смог сассоциировать курс с этим чатом: %w", err)
+	}
+
+	b.notifyAdminsAboutNewCourseChatAssociation(msg.Chat.Title, course, comment, msg.From.UserName)
+
+	return nil
+}
+
+func (b *Bot) notifyAdminsAboutNewCourseChatAssociation(chatTitle, course, comment, username string) {
+	message := fmt.Sprintf(
+		"🔄 Course association updated\n"+
+			"Chat: %s\n"+
+			"Course: %s\n"+
+			"Comment: %s\n"+
+			"Updated by: @%s",
+		chatTitle,
+		course,
+		comment,
+		username,
+	)
+
+	for _, adminID := range b.config.Bot.AdminIDs {
+		go func(id int64) {
+			if err := b.sendMessage(id, message); err != nil {
+				logger.Error.Printf("Failed to notify admin %d: %v", id, err)
+			}
+		}(adminID)
+	}
+}
+
+func (b *Bot) handleMapStudentCommand(msg *tgbotapi.Message) error {
+	args := strings.Fields(msg.CommandArguments())
+	if len(args) != 2 {
+		return b.sendMessage(msg.Chat.ID, "Использование:\n"+
+			"/map_student @username student.name - ассоциировать студента @username со student.name")
+	}
+
+	tgUsername := strings.TrimPrefix(args[0], "@")
+	if tgUsername == "" {
+		return fmt.Errorf("invalid telegram username")
+	}
+
+	studentID := args[1]
+	if !strings.Contains(studentID, ".") {
+		return fmt.Errorf("Неправильный формат studentID, должно быть: firstname.lastname")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
+	defer cancel()
+
+	mapping, err := b.tokenManager.FetchCourseMappingByChatID(ctx, msg.Chat.ID)
+	if err != nil {
+		return fmt.Errorf("этот чат не сассоциирован ни с каким курсом: %v. Попросите админа сделать /set_course", err)
+	}
+
+	if err := b.tokenManager.SaveStudentTelegramMapping(ctx, mapping.Course, tgUsername, studentID); err != nil {
+		return fmt.Errorf("failed to save student mapping: %w", err)
+	}
+
+	tokenInfo, isNewToken, err := b.tokenManager.FetchOrCreateStudentToken(ctx, mapping.Course, studentID)
+	if err != nil {
+		logger.Error.Printf("Failed to check existing token: %v", err)
+	}
+
+	var tokenStatus string
+	if err == nil {
+		if isNewToken {
+			tokenStatus = "\nНовый токен сгенерирован тоже."
+		} else {
+			tokenStatus = fmt.Sprintf(
+				"\nУ студента уже есть токен (запрошен, раз: %d, последний: %s)",
+				tokenInfo.RequestCount,
+				tokenInfo.LastRequestTime.Format("2006-01-02 15:04:05 MST"),
+			)
+		}
+	}
+
+	response := fmt.Sprintf(
+		"✅ Student mapping created\n"+
+			"Course: %s\n"+
+			"Telegram: @%s\n"+
+			"Student ID: %s%s",
+		mapping.Course,
+		tgUsername,
+		studentID,
+		tokenStatus,
+	)
+
+	if err := b.sendMessage(msg.Chat.ID, response); err != nil {
+		return fmt.Errorf("failed to send confirmation message: %w", err)
+	}
+
+	notificationMsg := fmt.Sprintf(
+		"👤 New student mapping\n"+
+			"Course: %s\n"+
+			"Telegram: @%s\n"+
+			"Student ID: %s\n"+
+			"Mapped by: @%s",
+		mapping.Course,
+		tgUsername,
+		studentID,
+		msg.From.UserName,
+	)
+
+	for _, adminID := range b.config.Bot.AdminIDs {
+		if adminID != msg.From.ID {
+			go func(id int64) {
+				if err := b.sendMessage(id, notificationMsg); err != nil {
+					logger.Error.Printf("Failed to notify admin %d: %v", id, err)
+				}
+			}(adminID)
+		}
+	}
+
+	return nil
+
 }
 
 func (b *Bot) sendMessage(chatID int64, text string) error {
