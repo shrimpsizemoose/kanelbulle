@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -152,4 +153,41 @@ func (tm *TokenManager) Close() error {
 		return tm.redis.Close()
 	}
 	return nil
+}
+
+func (tm *TokenManager) FetchAllChatMappings(ctx context.Context) (map[string]*models.ChatCourseMapping, error) {
+	// FIXME: scans are expensive
+	pattern := fmt.Sprintf("%s*", chatCourseKeyTpl)
+
+	iter := tm.redis.Scan(ctx, 0, pattern, 0).Iterator()
+
+	mappings := make(map[string]*models.ChatCourseMapping)
+
+	for iter.Next(ctx) {
+		key := iter.Val()
+		chatID := strings.TrimPrefix(key, chatCourseKeyTpl)
+
+		values, err := tm.redis.HGetAll(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+
+		associationTime, _ := time.Parse(timeFormat, values["association_dttm_utc"])
+		registeredBy, _ := strconv.ParseInt(values["registered_by"], 10, 64)
+
+		mappings[chatID] = &models.ChatCourseMapping{
+			Course:          values["course"],
+			Name:            values["name"],
+			Comment:         values["comment"],
+			AssociationTime: associationTime,
+			RegisteredBy:    registeredBy,
+		}
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("failed to fetch chat mappings: %w", err)
+	}
+
+	return mappings, nil
+
 }

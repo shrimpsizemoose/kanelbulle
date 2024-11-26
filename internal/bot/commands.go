@@ -26,6 +26,7 @@ const (
 /lab list <course> - Список лабораторных работ
 /override set <course> <student> <lab> score <score> reason <reason> - Установить оценку вручную
 /override list <course> - Список текущих оверрайдов
+/new_course COURSE_CODE +список пар @tg_username и student.id по одной в каждой строке
 /set_course <course> [comment] - Привязать чат к какому-то курсу
 /map_student @username <student.name> - Привязать телеграмный айдишник к student.id
 /help - Показать это сообщение
@@ -58,6 +59,7 @@ func (b *Bot) routeAdminCommands(cmd string) (commandHandler, bool) {
 		"override":    b.handleOverride,
 		"set_course":  b.handleSetCourseCommand,
 		"map_student": b.handleMapStudentCommand,
+		"new_course":  b.handleNewCourseCommand,
 	}
 	handler, found := commands[cmd]
 	return handler, found
@@ -402,6 +404,24 @@ func (b *Bot) handleOverrideList(chatID int64, course string) error {
 	return b.sendMessage(chatID, msg.String())
 }
 
+func isActiveMember(member tgbotapi.ChatMember) bool {
+    // Участник активен, если он:
+    // - создатель
+    // - администратор
+    // - обычный участник
+    // - с ограниченными правами
+    // Не активен, если:
+    // - покинул чат
+    // - был исключён
+    if member.HasLeft() || member.WasKicked() {
+        return false
+    }
+    return member.Status == "member" ||
+           member.Status == "administrator" ||
+           member.Status == "creator" ||
+           member.Status == "restricted"
+}
+
 func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
 	args := strings.SplitN(msg.CommandArguments(), " ", 2)
 	if len(args) < 1 {
@@ -416,6 +436,14 @@ func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
 
+	students, err := b.tokenManager.FetchCourseStudents(ctx, course)
+	if err != nil {
+		return fmt.Errorf("failed to fetch course data: %w", err)
+	}
+	if len(student) == 0 {
+		return fmt.Errorf("course %s not found. Use /new_course first")
+	}
+
 	mapping := &models.ChatCourseMapping{
 		Course:          course,
 		Name:            msg.Chat.Title,
@@ -428,7 +456,62 @@ func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
 		return fmt.Errorf("Не смог сассоциировать курс с этим чатом: %w", err)
 	}
 
+	if err := b.sendMessage(msg.Chat.ID, "⏳ Processing group members..."); err != nil {
+		logger.Error.Printf("Failed to send status message: %v", err)
+	}
+
 	b.notifyAdminsAboutNewCourseChatAssociation(msg.Chat.Title, course, comment, msg.From.UserName)
+
+	statusMsg := fmt.Sprintf(
+		"✅ Chat successfully associated with course %s\n"+
+			"🔍 Verifying student memberships...",
+		course,
+	)
+	if err := b.sendMessage(msg.Chat.ID, statusMsg); err != nil {
+		logger.Error.Printf("Failed to send status message: %v", err)
+	}
+
+	var presentStudents, missingStudents []string
+
+	for username := range students {
+		member, err := b.api.GetChatMember(tgbotapi.GetChatMemberConfig{
+			ChatConfigWithUser: tgbotapi.ChatConfigWithUser{
+				ChatID: msg.Chat.ID,
+				UserID: msg.From.ID,
+			},
+		})
+
+		isInChat := false
+		for status := range []string{"creator}
+		member.Status == "member"
+
+		if err != nil || !isInChat {
+			missingStudents = append(missingStudents, "@"+username)
+		} else {
+			presentStudents = append(presentStudents, "@"+username)
+		}
+	}
+
+	report := fmt.Sprintf(
+		"✅ Chat associated with course %s\n\n"+
+			"📊 Student status:\n"+
+			"✅ Present: %d students\n"+
+			"❌ Missing: %d students\n\n",
+		course,
+		len(presentStudents),
+		len(missingStudents),
+	)
+
+	if len(missingStudents) > 0 {
+		report += "Missing students:\n" + strings.Join(missingStudents, "\n")
+	}
+
+	edit := tgbotapi.NewEditMessageText(m.Chat.ID, msg.MessageID, report)
+	if _, err := b.bot.Send(edit); err != nil {
+		logger.Error.Printf("Failed to update status message: %v", err)
+	}
+
+	return nil
 
 	return nil
 }
@@ -540,7 +623,73 @@ func (b *Bot) handleMapStudentCommand(msg *tgbotapi.Message) error {
 	}
 
 	return nil
+}
 
+func (b *Bot) handleNewCourseCommand(msg *tgbotapi.Message) error {
+	lines := strings.Split(msg.Text, "\n")
+	if len(lines) < 2 {
+		return fmt.Errorf("Использование:\n/new_course COURSE_CODE\n@username1 student1.name\n@username2 student2.name")
+	}
+
+	course := strings.TrimSpace(strings.TrimPrefix(lines[0], "/new_course"))
+	if course == "" {
+		return fmt.Errorf("Нужен 'код' курса")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
+	defer cancel()
+
+	var processedStudents []string
+	var errors []string
+
+	for _, line := range lines[1:] {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		parts := strings.Fields(line)
+		if len(parts) != 2 {
+			errors = append(errors, fmt.Sprintf("Invalid line format: %s", line))
+			continue
+		}
+
+		tgUsername := strings.TrimPrefix(parts[0], "@")
+		studentID := parts[1]
+
+		if !strings.Contains(studentID, ".") {
+			errors = append(errors, fmt.Sprintf("Invalid student ID format: %s", studentID))
+			continue
+		}
+
+		if err := b.tokenManager.SaveStudentTelegramMapping(ctx, course, tgUsername, studentID); err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to map @%s to %s: %v", tgUsername, studentID, err))
+			continue
+		}
+
+		processedStudents = append(processedStudents, fmt.Sprintf("@%s -> %s", tgUsername, studentID))
+	}
+
+	var responseParts []string
+	responseParts = append(responseParts, fmt.Sprintf("📚 Course %s setup", course))
+
+	if len(processedStudents) > 0 {
+		responseParts = append(responseParts, "\n✅ Successfully mapped students:")
+		responseParts = append(responseParts, processedStudents...)
+	}
+
+	if len(errors) > 0 {
+		responseParts = append(responseParts, "\n⚠️ Errors occurred:")
+		responseParts = append(responseParts, errors...)
+	}
+
+	responseParts = append(responseParts, "\nℹ️ Use /set_course in target chat to activate the course")
+
+	if err := b.sendMessage(msg.Chat.ID, strings.Join(responseParts, "\n")); err != nil {
+		return fmt.Errorf("failed to send response: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) sendMessage(chatID int64, text string) error {
