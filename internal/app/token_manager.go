@@ -39,6 +39,9 @@ func generateToken() (string, error) {
 }
 
 func (tm *TokenManager) FetchOrCreateStudentToken(ctx context.Context, course, student string) (*models.TokenInfo, bool, error) {
+	if course == "" || student == "" {
+		return nil, false, fmt.Errorf("invalid or unknown course/student ID")
+	}
 	key := fmt.Sprintf(authKeyTpl, course, student)
 
 	token, err := tm.redis.HGet(ctx, key, "token").Result()
@@ -95,6 +98,22 @@ func (tm *TokenManager) FetchOrCreateStudentToken(ctx context.Context, course, s
 	}, isNewToken, nil
 }
 
+func (tm *TokenManager) SaveStudentCourseInfo(ctx context.Context, tgUsername string, info *models.StudentCourseInfo) error {
+	key := fmt.Sprintf("student_course:%s", tgUsername)
+
+	return tm.redis.HSet(ctx, key, info).Err()
+}
+
+func (tm *TokenManager) FetchStudentCourseInfo(ctx context.Context, tgUsername string) (*models.StudentCourseInfo, error) {
+	key := fmt.Sprintf("student_course:%s", tgUsername)
+	var info models.StudentCourseInfo
+
+	if err := tm.redis.HGetAll(ctx, key).Scan(&info); err != nil {
+		return nil, fmt.Errorf("Error fetching mapping found for %s", tgUsername)
+	}
+	return &info, nil
+}
+
 func (tm *TokenManager) SaveStudentTelegramMapping(ctx context.Context, course, tgUsername, studentID string) error {
 	key := fmt.Sprintf(lookupKeyTpl, course)
 	return tm.redis.HSet(ctx, key, tgUsername, studentID).Err()
@@ -123,6 +142,17 @@ func (tm *TokenManager) AssociateChatWithCourse(ctx context.Context, chatID int6
 		"associated_dttm_utc": mapping.AssociationTime.Format(timeFormat),
 		"registered_by":       mapping.RegisteredBy,
 	}).Err()
+}
+
+func (tm *TokenManager) FetchCourseStudents(ctx context.Context, course string) (map[string]string, error) {
+	key := fmt.Sprintf("lookup:%s", course)
+
+	students, err := tm.redis.HGetAll(ctx, key).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch course students: %w", err)
+	}
+
+	return students, nil
 }
 
 func (tm *TokenManager) FetchCourseMappingByChatID(ctx context.Context, chatID int64) (*models.ChatCourseMapping, error) {

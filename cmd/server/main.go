@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -12,7 +13,10 @@ import (
 )
 
 func main() {
-	service, err := app.NewService("config.toml")
+	var configPath = flag.String("config", "config.toml", "Path to config file")
+	flag.Parse()
+
+	service, err := app.NewService(*configPath)
 	if err != nil {
 		logger.Error.Fatalf("Failed to load config: %v", err)
 	}

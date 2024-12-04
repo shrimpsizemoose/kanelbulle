@@ -7,7 +7,6 @@ import (
 
 	"github.com/shrimpsizemoose/kanelbulle/internal/app"
 	"github.com/shrimpsizemoose/kanelbulle/internal/bot"
-	"github.com/shrimpsizemoose/kanelbulle/internal/scoring"
 )
 
 func main() {
@@ -25,15 +24,7 @@ func main() {
 	}
 	defer store.Close()
 
-	grader := scoring.NewGrader(
-		store,
-		cfg.Scoring.LateDaysModifiers,
-		cfg.Scoring.DefaultLatePenalty,
-		cfg.Scoring.MaxLateDays,
-		cfg.Scoring.ExtraLatePenalty,
-	)
-
-	b, err := bot.New(cfg, store, grader)
+	b, err := bot.New(cfg, store)
 	if err != nil {
 		logger.Error.Fatalf("Failed to create bot: %v", err)
 	}

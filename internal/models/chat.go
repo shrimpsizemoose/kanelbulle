@@ -9,3 +9,8 @@ type ChatCourseMapping struct {
 	AssociationTime time.Time `json:"association_time"`
 	RegisteredBy    int64     `json:"registered_by"`
 }
+
+type StudentCourseInfo struct {
+	StudentID string `redis:"student_id"`
+	Course    string `redis:"course"`
+}

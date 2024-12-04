@@ -11,7 +11,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/shrimpsizemoose/kanelbulle/internal/app"
-	"github.com/shrimpsizemoose/kanelbulle/internal/scoring"
+
 	"github.com/shrimpsizemoose/kanelbulle/internal/store"
 	"github.com/shrimpsizemoose/trekker/logger"
 )
@@ -19,13 +19,12 @@ import (
 type Bot struct {
 	config       *Config
 	store        store.ScoreStore
-	grader       *scoring.Grader
 	api          *tgbotapi.BotAPI
 	admins       map[int64]bool
 	tokenManager *app.TokenManager
 }
 
-func New(config *Config, store store.ScoreStore, grader *scoring.Grader) (*Bot, error) {
+func New(config *Config, store store.ScoreStore) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(config.Bot.Token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot API: %w", err)
@@ -51,7 +50,6 @@ func New(config *Config, store store.ScoreStore, grader *scoring.Grader) (*Bot, 
 	return &Bot{
 		config:       config,
 		store:        store,
-		grader:       grader,
 		api:          api,
 		admins:       admins,
 		tokenManager: tokenManager,

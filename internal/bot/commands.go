@@ -110,55 +110,92 @@ func (b *Bot) sendHelp(chatID int64) error {
 }
 
 func (b *Bot) handleStart(msg *tgbotapi.Message) error {
-	text := "Привет! Я помогу тебе с курсом.\n\n"
-	if b.admins[msg.From.ID] {
-		text += "Ты администратор курса. Используй /help для списка команд."
-	} else {
-		text += "Используй /token чтобы получить токен."
+	if msg.Chat.Type != "private" {
+		return nil
 	}
 
-	return b.sendMessage(msg.Chat.ID, text)
+	var response strings.Builder
+	// TODO: add emoji
+	response.WriteString("Привет!\n\n")
+
+	if b.admins[msg.From.ID] {
+		b.sendMessage(msg.Chat.ID, "Ты администратор бота. Команды:\n"+adminHelp)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
+	defer cancel()
+	info, err := b.tokenManager.FetchStudentCourseInfo(ctx, msg.From.UserName)
+	if err == nil {
+		response.WriteString(fmt.Sprintf("Вы студент курса `%s`.\n\n%s", info.Course, studentHelp))
+	}
+
+	return b.sendMessage(msg.Chat.ID, response.String())
+
 }
 
 func (b *Bot) handleTokenCommand(msg *tgbotapi.Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
 
-	mapping, err := b.tokenManager.FetchCourseMappingByChatID(ctx, msg.Chat.ID)
-	if err != nil {
-		return fmt.Errorf("failed to determine course: %w", err)
+	if msg.Chat.Type != "private" {
+		// delMsg := tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID)
+		// if _, err := b.api.Request(delMsg); err != nil {
+		// 	return fmt.Errorf("failed to delete message: %w", err)
+		// }
+		// return fmt.Errorf("Команда /token имеет смысл только в приватном чате")
+
+		warnMsg := tgbotapi.NewMessage(msg.Chat.ID, "Команда /token имеет смысл только в приватном чате")
+		warnMsg.ReplyToMessageID = msg.MessageID
+		reply, err := b.api.Send(warnMsg)
+		if err == nil {
+			go func() {
+				time.Sleep(12 * time.Second)
+				delWarn := tgbotapi.NewDeleteMessage(msg.Chat.ID, reply.MessageID)
+				if _, err := b.api.Request(delWarn); err != nil {
+					logger.Error.Printf("Failed to delete warning message: %v", err)
+				}
+				delMsg := tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID)
+				if _, err := b.api.Request(delMsg); err != nil {
+					logger.Error.Printf("failed to delete message: %v", err)
+				}
+			}()
+		}
+		return nil
 	}
 
-	studentID, err := b.tokenManager.FetchStudentIDByTelegram(ctx, mapping.Course, msg.From.UserName)
+	info, err := b.tokenManager.FetchStudentCourseInfo(ctx, msg.From.UserName)
 	if err != nil {
-		return fmt.Errorf("failed to get student ID: %w", err)
+		return fmt.Errorf("Не признал: %w", err)
 	}
 
-	tokenInfo, isNewToken, err := b.tokenManager.FetchOrCreateStudentToken(ctx, mapping.Course, studentID)
+	// mapping, err := b.tokenManager.FetchCourseMappingByChatID(ctx, msg.Chat.ID)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to determine course: %w", err)
+	// }
+
+	// studentID, err := b.tokenManager.FetchStudentIDByTelegram(ctx, mapping.Course, msg.From.UserName)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to get student ID: %w", err)
+	// }
+
+	tokenInfo, isNewToken, err := b.tokenManager.FetchOrCreateStudentToken(ctx, info.Course, info.StudentID)
 	if err != nil {
 		return fmt.Errorf("failed to get/create token: %w", err)
 	}
 
 	if isNewToken {
-		go b.notifyAdminsAboutNewToken(mapping.Course, studentID, tokenInfo.Token)
+		go b.notifyAdminsAboutNewToken(info.Course, info.StudentID, tokenInfo.Token)
 	}
 
 	text := fmt.Sprintf(
-		"Токен для курса %s:\n%s\nstudent: %s",
-		mapping.Course,
+		"🧩 %s\nStudent: `%s`\nToken: `%s`",
+		info.Course,
+		info.StudentID,
 		tokenInfo.Token,
-		studentID,
 	)
 
-	if err := b.sendMessage(msg.From.ID, text); err != nil {
+	if err := b.sendMessageMarkdown(msg.From.ID, text); err != nil {
 		return fmt.Errorf("failed to send token: %w", err)
-	}
-
-	if msg.Chat.Type != "private" {
-		delMsg := tgbotapi.NewDeleteMessage(msg.Chat.ID, msg.MessageID)
-		if _, err := b.api.Request(delMsg); err != nil {
-			return fmt.Errorf("failed to delete message: %w", err)
-		}
 	}
 
 	return nil
@@ -166,7 +203,7 @@ func (b *Bot) handleTokenCommand(msg *tgbotapi.Message) error {
 
 func (b *Bot) notifyAdminsAboutNewToken(course, student, token string) {
 	message := fmt.Sprintf(
-		"🔐 New token created\nCourse: %s\nStudent: %s\nToken: %s",
+		"🔐 New token created\nCourse: %s\nStudent: `%s`\nToken: `%s`",
 		course,
 		student,
 		token,
@@ -174,7 +211,7 @@ func (b *Bot) notifyAdminsAboutNewToken(course, student, token string) {
 
 	for _, adminID := range b.config.Bot.AdminIDs {
 		go func(id int64) {
-			if err := b.sendMessage(id, message); err != nil {
+			if err := b.sendMessageMarkdown(id, message); err != nil {
 				logger.Error.Printf("Failed to notify admin %d: %v", id, err)
 			}
 		}(adminID)
@@ -405,25 +442,30 @@ func (b *Bot) handleOverrideList(chatID int64, course string) error {
 }
 
 func isActiveMember(member tgbotapi.ChatMember) bool {
-    // Участник активен, если он:
-    // - создатель
-    // - администратор
-    // - обычный участник
-    // - с ограниченными правами
-    // Не активен, если:
-    // - покинул чат
-    // - был исключён
-    if member.HasLeft() || member.WasKicked() {
-        return false
-    }
-    return member.Status == "member" ||
-           member.Status == "administrator" ||
-           member.Status == "creator" ||
-           member.Status == "restricted"
+	// Не активен, если:
+	// - покинул чат
+	// - был исключён
+	if member.HasLeft() || member.WasKicked() {
+		return false
+	}
+	// Активен, если:
+	// - создатель
+	// - администратор
+	// - обычный участник
+	// - с ограниченными правами
+	return member.Status == "member" ||
+		member.Status == "administrator" ||
+		member.Status == "creator" ||
+		member.Status == "restricted"
 }
 
+// handleSetCourseCommand привязывает чат к курсу чтобы отслеживать join/leave события
 func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
-	args := strings.SplitN(msg.CommandArguments(), " ", 2)
+	if msg.Chat.Type == "private" {
+		return fmt.Errorf("Эту команду имеет смысл выполнять только в групповых чатах")
+	}
+
+	args := strings.Fields(msg.CommandArguments())
 	if len(args) < 1 {
 		return fmt.Errorf("использование: /set_course <course> [comment]")
 	}
@@ -436,14 +478,7 @@ func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
 
-	students, err := b.tokenManager.FetchCourseStudents(ctx, course)
-	if err != nil {
-		return fmt.Errorf("failed to fetch course data: %w", err)
-	}
-	if len(student) == 0 {
-		return fmt.Errorf("course %s not found. Use /new_course first")
-	}
-
+	// FIXME: сейчас это не так работает, маппинг на студента приходит другой
 	mapping := &models.ChatCourseMapping{
 		Course:          course,
 		Name:            msg.Chat.Title,
@@ -454,6 +489,14 @@ func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
 
 	if err := b.tokenManager.AssociateChatWithCourse(ctx, msg.Chat.ID, mapping); err != nil {
 		return fmt.Errorf("Не смог сассоциировать курс с этим чатом: %w", err)
+	}
+
+	students, err := b.tokenManager.FetchCourseStudents(ctx, course)
+	if err != nil {
+		return fmt.Errorf("failed to fetch course data: %w", err)
+	}
+	if len(students) == 0 {
+		return fmt.Errorf("course %s not found", course)
 	}
 
 	if err := b.sendMessage(msg.Chat.ID, "⏳ Processing group members..."); err != nil {
@@ -474,21 +517,31 @@ func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
 	var presentStudents, missingStudents []string
 
 	for username := range students {
+		// for username, userID := range students {
 		member, err := b.api.GetChatMember(tgbotapi.GetChatMemberConfig{
 			ChatConfigWithUser: tgbotapi.ChatConfigWithUser{
 				ChatID: msg.Chat.ID,
-				UserID: msg.From.ID,
+				UserID: msg.From.ID, // userID,
 			},
 		})
 
-		isInChat := false
-		for status := range []string{"creator}
-		member.Status == "member"
+		if err != nil {
+			logger.Error.Printf("Failed to check member %s: %v", username, err)
+			missingStudents = append(missingStudents, "@"+username+" (error)")
+			continue
+		}
 
-		if err != nil || !isInChat {
-			missingStudents = append(missingStudents, "@"+username)
+		if isActiveMember(member) {
+			presentStudents = append(
+				presentStudents,
+				fmt.Sprintf("@%s (%s)", username, member.Status),
+			)
 		} else {
-			presentStudents = append(presentStudents, "@"+username)
+			missingStudents = append(
+				missingStudents,
+				fmt.Sprintf("@%s (%s)", username, member.Status),
+			)
+
 		}
 	}
 
@@ -502,16 +555,17 @@ func (b *Bot) handleSetCourseCommand(msg *tgbotapi.Message) error {
 		len(missingStudents),
 	)
 
-	if len(missingStudents) > 0 {
-		report += "Missing students:\n" + strings.Join(missingStudents, "\n")
+	if len(presentStudents) > 0 {
+		report += "\nПосчитал:\n" + strings.Join(missingStudents, "\n")
 	}
 
-	edit := tgbotapi.NewEditMessageText(m.Chat.ID, msg.MessageID, report)
-	if _, err := b.bot.Send(edit); err != nil {
+	if len(missingStudents) > 0 {
+		report += "\n\nMissig/inactive:\n" + strings.Join(missingStudents, "\n")
+	}
+
+	if err := b.editMessage(msg.Chat.ID, msg.MessageID, report); err != nil {
 		logger.Error.Printf("Failed to update status message: %v", err)
 	}
-
-	return nil
 
 	return nil
 }
@@ -667,33 +721,53 @@ func (b *Bot) handleNewCourseCommand(msg *tgbotapi.Message) error {
 			continue
 		}
 
+		courseInfo := &models.StudentCourseInfo{
+			StudentID: studentID,
+			Course:    course,
+		}
+		if err := b.tokenManager.SaveStudentCourseInfo(ctx, tgUsername, courseInfo); err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to associate %s with course: %v", studentID, err))
+			continue
+		}
+
 		processedStudents = append(processedStudents, fmt.Sprintf("@%s -> %s", tgUsername, studentID))
 	}
 
-	var responseParts []string
-	responseParts = append(responseParts, fmt.Sprintf("📚 Course %s setup", course))
+	response := formatNewCourseResponse(course, processedStudents, errors)
+	return b.sendMessage(msg.Chat.ID, response)
+}
 
-	if len(processedStudents) > 0 {
-		responseParts = append(responseParts, "\n✅ Successfully mapped students:")
-		responseParts = append(responseParts, processedStudents...)
+func formatNewCourseResponse(course string, processed []string, errors []string) string {
+	var parts []string
+	parts = append(parts, fmt.Sprintf("📚 Course %s setup", course))
+
+	if len(processed) > 0 {
+		parts = append(parts, "\n✅ Mapped students:", strings.Join(processed, "\n"))
 	}
-
 	if len(errors) > 0 {
-		responseParts = append(responseParts, "\n⚠️ Errors occurred:")
-		responseParts = append(responseParts, errors...)
+		parts = append(parts, "\n⚠️ Errors:", strings.Join(errors, "\n"))
 	}
 
-	responseParts = append(responseParts, "\nℹ️ Use /set_course in target chat to activate the course")
+	// parts = append(parts, "\nℹ️ Use /set_course in target chat to activate the course")
 
-	if err := b.sendMessage(msg.Chat.ID, strings.Join(responseParts, "\n")); err != nil {
-		return fmt.Errorf("failed to send response: %w", err)
-	}
-
-	return nil
+	return strings.Join(parts, "\n")
 }
 
 func (b *Bot) sendMessage(chatID int64, text string) error {
 	msg := tgbotapi.NewMessage(chatID, text)
 	_, err := b.api.Send(msg)
+	return err
+}
+
+func (b *Bot) sendMessageMarkdown(chatID int64, text string) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
+	_, err := b.api.Send(msg)
+	return err
+}
+
+func (b *Bot) editMessage(chatID int64, msgID int, editText string) error {
+	edit := tgbotapi.NewEditMessageText(chatID, msgID, editText)
+	_, err := b.api.Send(edit)
 	return err
 }
