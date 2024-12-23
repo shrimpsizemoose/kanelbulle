@@ -1,0 +1,55 @@
+services:
+  redis:
+    image: "redis:7.0.0"
+    hostname: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 50
+    restart: always
+    volumes:
+      - ./redis_data:/data
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: kanelbulle
+      POSTGRES_PASSWORD: kanelbulle
+      POSTGRES_DB: kanelbulle
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    image: ghcr.io/shrimpsizemoose/kanelbulle-bot:0.2.0
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./config:/config
+    entrypoint: ["/bot", "-config", "/config/config.toml"]
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: ghcr.io/shrimpsizemoose/kanelbulle-server:0.2.0
+    ports:
+      - "9999:9999"
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./config:/config
+    entrypoint: ["server", "-config", "/config/config.toml"]
+
+volumes:
+  redis_data:
+  postgres_data:
+
