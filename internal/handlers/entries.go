@@ -52,6 +52,13 @@ func (h *EntryHandler) HandleLabEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lab := r.Header.Get(h.service.Config.API.LabIDHeader)
+	if lab == "" {
+		logger.Error.Printf("Failed to extract lab id from header, header attempted %s", h.service.Config.API.LabIDHeader)
+		http.Error(w, "Invalid lab id specified", http.StatusBadRequest)
+		return
+	}
+
 	student := r.Header.Get(h.service.Config.API.StudentIDHeader)
 	if student == "" {
 		http.Error(w, "Invalid student id specified", http.StatusUnauthorized)
@@ -79,7 +86,12 @@ func (h *EntryHandler) HandleLabEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	entry.Course = r.PathValue("course")
+	entry.Timestamp = time.Now().Unix()
+	entry.Lab = lab
+	entry.Student = student
+	entry.Course = course
+	entry.Comment = string(body)
+	logger.Debug.Printf("Saving entry %v", entry)
 
 	if err := h.service.Store.CreateEntry(&entry); err != nil {
 		http.Error(w, "Failed to save entry", http.StatusInternalServerError)

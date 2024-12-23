@@ -31,8 +31,8 @@ type Config struct {
 	Server struct {
 		Port string `toml:"port"`
 	} `toml:"server"`
-	EmojiVariants []string                    `toml:"emoji_variants"`
-	GSheet        map[string][]GSheetConfig   `toml:"gsheet"`
+	EmojiVariants []string                  `toml:"emoji_variants"`
+	GSheet        map[string][]GSheetConfig `toml:"gsheet"`
 
 	Auth struct {
 		Enabled          bool   `toml:"enabled"`
@@ -43,6 +43,7 @@ type Config struct {
 
 	API struct {
 		StudentIDHeader string         `toml:"student_id_header"`
+		LabIDHeader     string         `toml:"lab_id_header"`
 		RequiredHeaders []HeaderConfig `toml:"required_headers"`
 	} `toml:"api"`
 

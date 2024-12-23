@@ -22,10 +22,9 @@ func main() {
 	}
 	defer service.Close()
 
-	if _, err := export.NewGSheetExporter(cfg, store); err != nil {
-		log.Fatalf("Failed to initialize Google Sheets exporter: %v", err)
-	}
-
+	// if _, err := export.NewGSheetExporter(cfg, store); err != nil {
+	// 	log.Fatalf("Failed to initialize Google Sheets exporter: %v", err)
+	// }
 
 	entryHandler := handlers.NewEntryHandler(service)
 
