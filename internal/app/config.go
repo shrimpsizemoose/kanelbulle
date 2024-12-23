@@ -14,10 +14,25 @@ type HeaderConfig struct {
 	Value string `toml:"value"`
 }
 
+type GSheetConfig struct {
+	Schedule        string   `toml:"schedule"`
+	Course          string   `toml:"course"`
+	SheetID         string   `toml:"sheet_id"`
+	CredentialsPath string   `toml:"credentials_path"`
+	SheetName       string   `toml:"sheet_name"`
+	StudentsRange   string   `toml:"students_range"`
+	LabsRange       string   `toml:"labs_range"`
+	TimestampRange  string   `toml:"timestamp_range"`
+	Scoring         bool     `toml:"scoring"`
+	LabsList        []string `toml:"labs_list"`
+}
+
 type Config struct {
 	Server struct {
 		Port string `toml:"port"`
 	} `toml:"server"`
+	EmojiVariants []string                    `toml:"emoji_variants"`
+	GSheet        map[string][]GSheetConfig   `toml:"gsheet"`
 
 	Auth struct {
 		Enabled          bool   `toml:"enabled"`
