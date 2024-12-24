@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 
 	"github.com/pelletier/go-toml/v2"
@@ -31,8 +32,7 @@ type Config struct {
 	Server struct {
 		Port string `toml:"port"`
 	} `toml:"server"`
-	EmojiVariants []string                  `toml:"emoji_variants"`
-	GSheet        map[string][]GSheetConfig `toml:"gsheet"`
+	GSheet map[string][]GSheetConfig `toml:"gsheet"`
 
 	Auth struct {
 		Enabled          bool   `toml:"enabled"`
@@ -52,7 +52,8 @@ type Config struct {
 	} `toml:"database"`
 
 	Display struct {
-		TimestampFormat string `toml:"timestamp_format"`
+		TimestampFormat string   `toml:"timestamp_format"`
+		EmojiVariants   []string `toml:"emoji_variants"`
 	} `toml:"display"`
 
 	Scoring struct {
@@ -67,6 +68,15 @@ type Config struct {
 		Finish string `toml:"finish"`
 		Almost string `toml:"almost"`
 	} `toml:"events"`
+}
+
+func (c *Config) RandomEmoji() string {
+
+	if c.Display.EmojiVariants == nil || len(c.Display.EmojiVariants) == 0 {
+		return "🍕"
+	}
+
+	return c.Display.EmojiVariants[rand.Intn(len(c.Display.EmojiVariants))]
 }
 
 func LoadConfig(path string) (*Config, error) {

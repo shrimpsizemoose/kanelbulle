@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"log"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -9,6 +10,7 @@ import (
 	"github.com/shrimpsizemoose/trekker/logger"
 
 	"github.com/shrimpsizemoose/kanelbulle/internal/app"
+	"github.com/shrimpsizemoose/kanelbulle/internal/export"
 	"github.com/shrimpsizemoose/kanelbulle/internal/handlers"
 )
 
@@ -22,9 +24,9 @@ func main() {
 	}
 	defer service.Close()
 
-	// if _, err := export.NewGSheetExporter(cfg, store); err != nil {
-	// 	log.Fatalf("Failed to initialize Google Sheets exporter: %v", err)
-	// }
+	if _, err := export.NewGSheetExporter(service.Config, service.Store); err != nil {
+		log.Fatalf("Failed to initialize Google Sheets exporter: %v", err)
+	}
 
 	entryHandler := handlers.NewEntryHandler(service)
 

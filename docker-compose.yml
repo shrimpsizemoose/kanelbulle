@@ -27,7 +27,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.bot
-    image: ghcr.io/shrimpsizemoose/kanelbulle-bot:0.2.0
+    image: ghcr.io/shrimpsizemoose/kanelbulle-bot:0.3.0
     depends_on:
       - redis
       - postgres
@@ -39,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
-    image: ghcr.io/shrimpsizemoose/kanelbulle-server:0.2.0
+    image: ghcr.io/shrimpsizemoose/kanelbulle-server:0.3.0
     ports:
       - "9999:9999"
     depends_on:

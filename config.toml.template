@@ -39,3 +39,16 @@ extra_late_penalty = 1
 [display]
 timestamp_format = "YYYY-MM-DD HH24:MI:SS"
 go_timestamp_format = "2006-01-02 15:04:05"
+emoji_variants = ["🤖", "🦄", "🐕", "🔬", "🐉", "🦥", "🐙", "🐈", "🎓", "🐊", "🦊"]
+
+[[gsheet.TECH01]]
+schedule = "*/5 7-22 * * *"
+course = "TECH01"
+sheet_id = "1HqV8HkSX.....................Gd0DYquVCcWREI"
+credentials_path = "/config/creds.json"
+sheet_name = "Ведомость"
+students_range = "B6:B18"
+labs_range = "C6:E18"
+timestamp_range = "A1:B1"
+scoring = false
+labs_list = ["00", "01", "02"]
