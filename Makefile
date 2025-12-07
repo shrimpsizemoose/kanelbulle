@@ -25,3 +25,9 @@ docker-push:
 
 clean:
 	rm -rf bin/
+
+tell-dependabot-issues:
+	@printf "STATE\tSEVERITY\tPACKAGE\tFIXED IN\tSUMMARY\n" | expand -t 12,22,56,66
+	@gh api repos/shrimpsizemoose/kanelbulle/dependabot/alerts \
+		--jq 'sort_by(.security_advisory.severity | {critical:0,high:1,medium:2,low:3}[.]) | .[] | [.state, .security_advisory.severity, .dependency.package.name, (.security_vulnerability.first_patched_version.identifier // "n/a"), .security_advisory.summary] | @tsv' \
+		| expand -t 12,22,56,66
