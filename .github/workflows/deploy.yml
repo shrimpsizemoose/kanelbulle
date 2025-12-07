@@ -1,0 +1,102 @@
+name: Deploy to Kubernetes
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - bot
+          - server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "Using tag: $VERSION"
+          else
+            VERSION=$(git describe --tags --abbrev=0)
+            echo "Branch selected, falling back to latest tag: $VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Update image tags
+        run: |
+          sed -i 's|kanelbulle-bot:.*|kanelbulle-bot:${{ steps.version.outputs.version }}|g' k8s/kanelbulle-bot.yml
+          sed -i 's|kanelbulle-server:.*|kanelbulle-server:${{ steps.version.outputs.version }}|g' k8s/kanelbulle-server.yml
+
+      - name: Deploy bot
+        if: inputs.component == 'all' || inputs.component == 'bot'
+        run: kubectl apply -f k8s/kanelbulle-bot.yml
+
+      - name: Deploy server
+        if: inputs.component == 'all' || inputs.component == 'server'
+        run: kubectl apply -f k8s/kanelbulle-server.yml
+
+      - name: Wait for rollout
+        id: rollout
+        run: |
+          BOT_STATUS="skipped"
+          SERVER_STATUS="skipped"
+
+          if [ "${{ inputs.component }}" = "all" ] || [ "${{ inputs.component }}" = "bot" ]; then
+            if kubectl rollout status deployment/kanelbulle-bot -n kanelbulle --timeout=120s; then
+              BOT_STATUS="success"
+            else
+              BOT_STATUS="failed"
+            fi
+          fi
+
+          if [ "${{ inputs.component }}" = "all" ] || [ "${{ inputs.component }}" = "server" ]; then
+            if kubectl rollout status deployment/kanelbulle-server -n kanelbulle --timeout=120s; then
+              SERVER_STATUS="success"
+            else
+              SERVER_STATUS="failed"
+            fi
+          fi
+
+          echo "bot_status=$BOT_STATUS" >> $GITHUB_OUTPUT
+          echo "server_status=$SERVER_STATUS" >> $GITHUB_OUTPUT
+
+      - name: Write summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## Deployment Summary
+
+          | | |
+          |---|---|
+          | **Version** | \`${{ steps.version.outputs.version }}\` |
+          | **Component** | ${{ inputs.component }} |
+          | **Triggered by** | @${{ github.actor }} |
+
+          ### Rollout Status
+
+          | Component | Status |
+          |-----------|--------|
+          | Bot | ${{ steps.rollout.outputs.bot_status == 'success' && '✅' || steps.rollout.outputs.bot_status == 'skipped' && '⏭️' || '❌' }} ${{ steps.rollout.outputs.bot_status }} |
+          | Server | ${{ steps.rollout.outputs.server_status == 'success' && '✅' || steps.rollout.outputs.server_status == 'skipped' && '⏭️' || '❌' }} ${{ steps.rollout.outputs.server_status }} |
+          EOF
