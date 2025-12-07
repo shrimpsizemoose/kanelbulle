@@ -128,6 +128,52 @@ func (tm *TokenManager) FetchStudentIDByTelegram(ctx context.Context, course, tg
 	return studentID, err
 }
 
+func (tm *TokenManager) FetchTelegramByStudentID(ctx context.Context, course, studentID string) (string, error) {
+	mappings, err := tm.FetchCourseMappings(ctx, course)
+	if err != nil {
+		return "", err
+	}
+
+	for tgUsername, sID := range mappings {
+		if sID == studentID {
+			return tgUsername, nil
+		}
+	}
+	return "", fmt.Errorf("no telegram mapping found for student %s in course %s", studentID, course)
+}
+
+func (tm *TokenManager) UpdateStudentTelegramMapping(ctx context.Context, course, studentID, newTgUsername string) (string, error) {
+	oldTgUsername, err := tm.FetchTelegramByStudentID(ctx, course, studentID)
+	if err != nil {
+		return "", fmt.Errorf("student %s not found in course %s: %w", studentID, course, err)
+	}
+
+	lookupKey := fmt.Sprintf(lookupKeyTpl, course)
+
+	pipe := tm.redis.Pipeline()
+
+	pipe.HDel(ctx, lookupKey, oldTgUsername)
+
+	oldStudentCourseKey := fmt.Sprintf("student_course:%s", oldTgUsername)
+	pipe.Del(ctx, oldStudentCourseKey)
+
+	pipe.HSet(ctx, lookupKey, newTgUsername, studentID)
+
+	if _, err := pipe.Exec(ctx); err != nil {
+		return "", fmt.Errorf("failed to update telegram mapping: %w", err)
+	}
+
+	newStudentCourseKey := fmt.Sprintf("student_course:%s", newTgUsername)
+	if err := tm.redis.HSet(ctx, newStudentCourseKey, map[string]interface{}{
+		"student_id": studentID,
+		"course":     course,
+	}).Err(); err != nil {
+		return "", fmt.Errorf("failed to save new student course info: %w", err)
+	}
+
+	return oldTgUsername, nil
+}
+
 func (tm *TokenManager) FetchCourseMappings(ctx context.Context, course string) (map[string]string, error) {
 	key := fmt.Sprintf(lookupKeyTpl, course)
 	return tm.redis.HGetAll(ctx, key).Result()

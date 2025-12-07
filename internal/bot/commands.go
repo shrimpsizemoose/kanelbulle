@@ -29,6 +29,7 @@ const (
 /new_course COURSE_CODE +список пар @tg_username и student.id по одной в каждой строке
 /set_course <course> [comment] - Привязать чат к какому-то курсу
 /map_student @username <student.name> - Привязать телеграмный айдишник к student.id
+/remap_student <course> <student.name> @new_username - Изменить телеграм для существующего студента
 /help - Показать это сообщение
 
 Примеры:
@@ -37,6 +38,7 @@ const (
 /override set DE15 01s student.name score 8 reason "Late submission accepted"
 /override list DE15
 /map_student @karkarkar kaggi.kar
+/remap_student DE15 kaggi.kar @newusername
 /set_course DE15 "Дамокловы Экивоки 14+"
 `
 )
@@ -55,11 +57,12 @@ func (b *Bot) routeStudentCommands(cmd string) (commandHandler, bool) {
 
 func (b *Bot) routeAdminCommands(cmd string) (commandHandler, bool) {
 	commands := map[string]commandHandler{
-		"lab":         b.handleLab,
-		"override":    b.handleOverride,
-		"set_course":  b.handleSetCourseCommand,
-		"map_student": b.handleMapStudentCommand,
-		"new_course":  b.handleNewCourseCommand,
+		"lab":           b.handleLab,
+		"override":      b.handleOverride,
+		"set_course":    b.handleSetCourseCommand,
+		"map_student":   b.handleMapStudentCommand,
+		"remap_student": b.handleRemapStudentCommand,
+		"new_course":    b.handleNewCourseCommand,
 	}
 	handler, found := commands[cmd]
 	return handler, found
@@ -663,6 +666,76 @@ func (b *Bot) handleMapStudentCommand(msg *tgbotapi.Message) error {
 		mapping.Course,
 		tgUsername,
 		studentID,
+		msg.From.UserName,
+	)
+
+	for _, adminID := range b.config.Bot.AdminIDs {
+		if adminID != msg.From.ID {
+			go func(id int64) {
+				if err := b.sendMessage(id, notificationMsg); err != nil {
+					logger.Error.Printf("Failed to notify admin %d: %v", id, err)
+				}
+			}(adminID)
+		}
+	}
+
+	return nil
+}
+
+func (b *Bot) handleRemapStudentCommand(msg *tgbotapi.Message) error {
+	args := strings.Fields(msg.CommandArguments())
+	if len(args) != 3 {
+		return b.sendMessage(msg.Chat.ID, "Использование:\n"+
+			"/remap_student <course> <student.name> @new_username - изменить телеграм для студента")
+	}
+
+	course := args[0]
+	studentID := args[1]
+	newTgUsername := strings.TrimPrefix(args[2], "@")
+
+	if !strings.Contains(studentID, ".") {
+		return fmt.Errorf("неправильный формат studentID, должно быть: firstname.lastname")
+	}
+
+	if newTgUsername == "" {
+		return fmt.Errorf("invalid telegram username")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
+	defer cancel()
+
+	oldTgUsername, err := b.tokenManager.UpdateStudentTelegramMapping(ctx, course, studentID, newTgUsername)
+	if err != nil {
+		return fmt.Errorf("failed to update mapping: %w", err)
+	}
+
+	response := fmt.Sprintf(
+		"✅ Student mapping updated\n"+
+			"Course: %s\n"+
+			"Student ID: %s\n"+
+			"Old Telegram: @%s\n"+
+			"New Telegram: @%s",
+		course,
+		studentID,
+		oldTgUsername,
+		newTgUsername,
+	)
+
+	if err := b.sendMessage(msg.Chat.ID, response); err != nil {
+		return fmt.Errorf("failed to send confirmation message: %w", err)
+	}
+
+	notificationMsg := fmt.Sprintf(
+		"🔄 Student mapping updated\n"+
+			"Course: %s\n"+
+			"Student ID: %s\n"+
+			"Old Telegram: @%s\n"+
+			"New Telegram: @%s\n"+
+			"Updated by: @%s",
+		course,
+		studentID,
+		oldTgUsername,
+		newTgUsername,
 		msg.From.UserName,
 	)
 
