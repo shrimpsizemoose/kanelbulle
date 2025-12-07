@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kanelbulle-bot
+  namespace: kanelbulle
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kanelbulle-bot
+  template:
+    metadata:
+      labels:
+        app: kanelbulle-bot
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: bot
+          image: ghcr.io/shrimpsizemoose/kanelbulle-bot:0.3.0
+          command: ["/bot"]
+          args: ["-config", "/config/config.toml"]
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: migrations
+              mountPath: /migrations
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+      volumes:
+        - name: config
+          configMap:
+            name: kanelbulle-config
+        - name: migrations
+          configMap:
+            name: kanelbulle-migrations

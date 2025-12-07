@@ -1,0 +1,3 @@
+# k8s secrets (use *.template.y*ml files as reference)
+secrets.yaml
+kanelbulle-configmap.yml
