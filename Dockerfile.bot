@@ -1,7 +1,5 @@
 FROM golang:1.23-alpine AS builder
 
-LABEL org.opencontainers.image.source=https://github.com/shrimpsizemoose/kanelbulle
-
 ARG VERSION=dev
 
 WORKDIR /app
@@ -13,5 +11,6 @@ COPY . .
 RUN go build -ldflags "-X github.com/shrimpsizemoose/kanelbulle/internal/bot.Version=${VERSION}" -o /bot ./cmd/bot
 
 FROM alpine:3.19
+LABEL org.opencontainers.image.source=https://github.com/shrimpsizemoose/kanelbulle
 COPY --from=builder /bot /bot
 ENTRYPOINT ["/bot"]
