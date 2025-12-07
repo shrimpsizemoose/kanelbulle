@@ -2,13 +2,15 @@ FROM golang:1.23-alpine AS builder
 
 LABEL org.opencontainers.image.source=https://github.com/shrimpsizemoose/kanelbulle
 
+ARG VERSION=dev
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -o /bot ./cmd/bot
+RUN go build -ldflags "-X github.com/shrimpsizemoose/kanelbulle/internal/bot.Version=${VERSION}" -o /bot ./cmd/bot
 
 FROM alpine:3.19
 COPY --from=builder /bot /bot

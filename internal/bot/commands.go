@@ -13,6 +13,9 @@ import (
 	"github.com/shrimpsizemoose/kanelbulle/internal/models"
 )
 
+// Version is set via ldflags at build time
+var Version = "dev"
+
 const (
 	operationTimeout = 5 * time.Second
 
@@ -104,6 +107,8 @@ func (b *Bot) handleHelp(msg *tgbotapi.Message) error {
 	} else {
 		text = studentHelp
 	}
+
+	text += fmt.Sprintf("\n\nVersion: %s", Version)
 
 	return b.sendMessage(msg.Chat.ID, text)
 }
