@@ -33,6 +33,8 @@ docker compose up -d
 | GET | `/api/v1/{course}/scoring` | Получить баллы |
 | GET | `/metrics` | Prometheus-метрики, легонько анонимизированные |
 
+Подробнее с примерами: [SERVER_API.md](SERVER_API.md)
+
 ## Команды бота
 
 **Студенты:**
