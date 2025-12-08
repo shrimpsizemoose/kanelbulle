@@ -6,6 +6,9 @@ LDFLAGS := -X github.com/shrimpsizemoose/kanelbulle/internal/bot.Version=$(VERSI
 echo-version:
 	@echo current version = $(VERSION)
 
+get-pods:
+	kubectl get pods -n kanelbulle
+
 build: build-bot build-server build-exporter
 
 build-bot:
