@@ -52,3 +52,4 @@ labs_range = "C6:E18"
 timestamp_range = "A1:B1"
 scoring = false
 labs_list = ["00", "01", "02"]
+# end_date = "2025-06-30"  # optional - stops gsheet updates after this date

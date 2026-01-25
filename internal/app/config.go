@@ -26,6 +26,7 @@ type GSheetConfig struct {
 	TimestampRange  string   `toml:"timestamp_range"`
 	Scoring         bool     `toml:"scoring"`
 	LabsList        []string `toml:"labs_list"`
+	EndDate         string   `toml:"end_date"`
 }
 
 type Config struct {

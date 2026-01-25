@@ -61,6 +61,14 @@ func NewGSheetExporter(config *app.Config, store store.ScoreStore) (*GSheetExpor
 }
 
 func (e *GSheetExporter) Export(courseName string, cfg *app.GSheetConfig) error {
+	if cfg.EndDate != "" {
+		endDate, err := time.Parse("2006-01-02", cfg.EndDate)
+		if err == nil && time.Now().After(endDate) {
+			logger.Debug.Printf("Skipping export for %s: course ended %s", cfg.Course, cfg.EndDate)
+			return nil
+		}
+	}
+
 	// Read students first
 	readRange := fmt.Sprintf("%s!%s", cfg.SheetName, cfg.StudentsRange)
 	resp, err := e.sheetsService.Spreadsheets.Values.Get(cfg.SheetID, readRange).Do()
