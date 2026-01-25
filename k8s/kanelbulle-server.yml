@@ -12,12 +12,16 @@ spec:
     metadata:
       labels:
         app: kanelbulle-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9999"
+        prometheus.io/path: "/metrics"
     spec:
       imagePullSecrets:
         - name: ghcr-secret
       containers:
         - name: server
-          image: ghcr.io/shrimpsizemoose/kanelbulle-server:0.4.0
+          image: ghcr.io/shrimpsizemoose/kanelbulle-server:v0.4
           command: ["/server"]
           args: ["-config", "/config/config.toml"]
           env:
