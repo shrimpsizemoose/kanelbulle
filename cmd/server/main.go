@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/shrimpsizemoose/kanelbulle/internal/app"
 	"github.com/shrimpsizemoose/kanelbulle/internal/export"
 	"github.com/shrimpsizemoose/kanelbulle/internal/handlers"
+	"github.com/shrimpsizemoose/kanelbulle/internal/version"
 )
 
 func main() {
@@ -34,6 +36,25 @@ func main() {
 	http.HandleFunc("GET /api/v1/{course}/analytics", entryHandler.HandleLabInfo)
 	http.HandleFunc("GET /api/v1/{course}/analytics/finish", entryHandler.HandleLabFinishInfo)
 	http.HandleFunc("GET /api/v1/{course}/scoring", entryHandler.HandleScoring)
+
+	http.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Service-Version", version.Version)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status":                      "ok",
+			"version":                     version.Version,
+			"i_accidentally_orange_juice": "the_whole_thing",
+		})
+	})
+
+	http.HandleFunc("GET /version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Service-Version", version.Version)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"version": version.Version,
+		})
+	})
 
 	http.HandleFunc("GET /admin", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/index.html")

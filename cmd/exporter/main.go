@@ -10,6 +10,7 @@ import (
 
 	"github.com/shrimpsizemoose/kanelbulle/internal/app"
 	"github.com/shrimpsizemoose/kanelbulle/internal/export"
+	"github.com/shrimpsizemoose/kanelbulle/internal/version"
 )
 
 func main() {
@@ -26,7 +27,7 @@ func main() {
 		logger.Error.Fatalf("Failed to initialize Google Sheets exporter: %v", err)
 	}
 
-	logger.Info.Println("Садимся экспортить")
+	logger.Info.Printf("Exporter initialized, version=%s", version.Version)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

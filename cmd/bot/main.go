@@ -7,6 +7,7 @@ import (
 
 	"github.com/shrimpsizemoose/kanelbulle/internal/app"
 	"github.com/shrimpsizemoose/kanelbulle/internal/bot"
+	"github.com/shrimpsizemoose/kanelbulle/internal/version"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 		logger.Error.Fatalf("Failed to create bot: %v", err)
 	}
 
-	logger.Info.Println("Bot intialized succesfully")
+	logger.Info.Printf("Bot initialized successfully, version=%s", version.Version)
 	if err := b.Start(); err != nil {
 		logger.Error.Fatalf("Bot error: %v", err)
 	}

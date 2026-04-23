@@ -12,5 +12,6 @@ RUN go build -ldflags "-X github.com/shrimpsizemoose/kanelbulle/internal/bot.Ver
 
 FROM alpine:3.19
 LABEL org.opencontainers.image.source=https://github.com/shrimpsizemoose/kanelbulle
+LABEL org.opencontainers.image.version=${VERSION}
 COPY --from=builder /server /server
 ENTRYPOINT ["/server"]

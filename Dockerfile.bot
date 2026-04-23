@@ -8,9 +8,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -ldflags "-X github.com/shrimpsizemoose/kanelbulle/internal/bot.Version=${VERSION}" -o /bot ./cmd/bot
+RUN go build -ldflags "-X github.com/shrimpsizemoose/kanelbulle/internal/version.Version=${VERSION}" -o /bot ./cmd/bot
 
 FROM alpine:3.19
 LABEL org.opencontainers.image.source=https://github.com/shrimpsizemoose/kanelbulle
+LABEL org.opencontainers.image.version=${VERSION}
 COPY --from=builder /bot /bot
 ENTRYPOINT ["/bot"]

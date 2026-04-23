@@ -13,9 +13,6 @@ import (
 	"github.com/shrimpsizemoose/kanelbulle/internal/models"
 )
 
-// Version is set via ldflags at build time
-var Version = "dev"
-
 const (
 	operationTimeout = 5 * time.Second
 
