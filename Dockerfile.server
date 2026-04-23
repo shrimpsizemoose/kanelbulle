@@ -8,7 +8,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -ldflags "-X github.com/shrimpsizemoose/kanelbulle/internal/bot.Version=${VERSION}" -o /server ./cmd/server
+RUN go build -ldflags "-X github.com/shrimpsizemoose/kanelbulle/internal/version.Version=${VERSION}" -o /server ./cmd/server
 
 FROM alpine:3.19
 LABEL org.opencontainers.image.source=https://github.com/shrimpsizemoose/kanelbulle

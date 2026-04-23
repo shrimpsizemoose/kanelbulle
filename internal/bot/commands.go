@@ -11,6 +11,7 @@ import (
 	"github.com/shrimpsizemoose/trekker/logger"
 
 	"github.com/shrimpsizemoose/kanelbulle/internal/models"
+	"github.com/shrimpsizemoose/kanelbulle/internal/version"
 )
 
 const (
@@ -105,7 +106,7 @@ func (b *Bot) handleHelp(msg *tgbotapi.Message) error {
 		text = studentHelp
 	}
 
-	text += fmt.Sprintf("\n\nVersion: %s", Version)
+	text += fmt.Sprintf("\n\nVersion: %s", version.Version)
 
 	return b.sendMessage(msg.Chat.ID, text)
 }
