@@ -42,6 +42,10 @@ func NewSQLiteStore(dsn, migrationsDir string) (*SQLiteStore, error) {
 func (s *SQLiteStore) ApplyMigrations(dir string) error {
 	// translateToSQLite converts Postgres SQL to SQLite dialect
 	translateToSQLite := func(sql string) string {
+		if strings.Contains(sql, "ALTER COLUMN course TYPE VARCHAR(32)") {
+			return ""
+		}
+
 		replacements := map[string]string{
 			"BIGSERIAL":                        "INTEGER PRIMARY KEY AUTOINCREMENT",
 			"SERIAL":                           "INTEGER PRIMARY KEY AUTOINCREMENT",
@@ -54,6 +58,7 @@ func (s *SQLiteStore) ApplyMigrations(dir string) error {
 			"now()":                            "CURRENT_TIMESTAMP",
 			"VARCHAR(3)":                       "TEXT",
 			"VARCHAR(6)":                       "TEXT",
+			"VARCHAR(32)":                      "TEXT",
 			`CHECK (student ~ '^[\w-]+\..+$')`: "",
 			"::text":                           "",
 		}

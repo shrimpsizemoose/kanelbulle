@@ -72,7 +72,7 @@ data:
         event_type TEXT NOT NULL,
         lab VARCHAR(3) NOT NULL,
         student TEXT NOT NULL,
-        course VARCHAR(6) NOT NULL,
+        course VARCHAR(32) NOT NULL,
         comment TEXT
     );
 
@@ -81,7 +81,7 @@ data:
         deadline BIGINT NOT NULL,
         lab VARCHAR(3) NOT NULL,
         base_score INTEGER NOT NULL,
-        course VARCHAR(6) NOT NULL,
+        course VARCHAR(32) NOT NULL,
         CONSTRAINT lab_scores_pkey PRIMARY KEY (course, lab)
     );
 
@@ -90,7 +90,7 @@ data:
         student TEXT NOT NULL CHECK (student ~ '^[\w-]+\..+$'),
         lab VARCHAR(3) NOT NULL,
         score INTEGER NOT NULL,
-        course VARCHAR(6) NOT NULL,
+        course VARCHAR(32) NOT NULL,
         reason TEXT,
         CONSTRAINT score_overrides_pkey PRIMARY KEY (course, lab, student)
     );

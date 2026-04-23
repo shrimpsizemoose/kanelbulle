@@ -51,7 +51,15 @@ func (m *MockStore) CreateScoreOverride(override models.ScoreOverride) error {
 	return nil
 }
 
-func (m *MockStore) ListScoreOverrides() ([]models.ScoreOverride, error) {
+func (m *MockStore) ListCourseScoreOverrides(course string) ([]models.ScoreOverride, error) {
+	return nil, nil
+}
+
+func (m *MockStore) CreateLabScore(labScore models.LabScore) error {
+	return nil
+}
+
+func (m *MockStore) ListLabScores(course string) ([]models.LabScore, error) {
 	return nil, nil
 }
 

@@ -17,6 +17,8 @@ import (
 	"github.com/shrimpsizemoose/kanelbulle/internal/models"
 )
 
+const testCourse = "ITMOPDA26"
+
 // setupTestDB creates an in-memory Postgres database and initializes schema
 func setupTestDB(t *testing.T) (*PostgresStore, func()) {
 	ctx := context.Background()
@@ -62,9 +64,10 @@ func setupTestData(t *testing.T) (*testData, func()) {
 	// Lab scores setup
 	_, err := s.DB.Exec(`
 		INSERT INTO lab_scores (lab, course, deadline, base_score) VALUES 
-		('l1', 'cs101', $1, 10),
-		('l2', 'cs101', $2, 15),
-		('l3', 'cs101', $3, 20)`,
+		('l1', $1, $2, 10),
+		('l2', $1, $3, 15),
+		('l3', $1, $4, 20)`,
+		testCourse,
 		time.Date(2024, 1, 1, 23, 59, 59, 0, time.UTC).Unix(),
 		time.Date(2024, 1, 15, 23, 59, 59, 0, time.UTC).Unix(),
 		time.Date(2024, 2, 1, 23, 59, 59, 0, time.UTC).Unix(),
@@ -98,7 +101,7 @@ func TestCreateAndGetEntry(t *testing.T) {
 		EventType: "100_lab_finish",
 		Lab:       "l1",
 		Student:   "john.doe",
-		Course:    "cs101",
+		Course:    testCourse,
 		Comment:   "test entry",
 	}
 
@@ -108,7 +111,7 @@ func TestCreateAndGetEntry(t *testing.T) {
 	})
 
 	t.Run("get entry", func(t *testing.T) {
-		got, err := td.store.GetStudentFinishEvent(entry.Student, entry.Lab, entry.Course)
+		got, err := td.store.GetStudentFinishEvent(entry.Course, entry.Lab, entry.Student)
 		require.NoError(t, err, "Failed to get entry")
 		require.NotNil(t, got)
 		assert.Equal(t, entry.Timestamp, got.Timestamp)
@@ -131,14 +134,14 @@ func TestGetStudentFinishEvent(t *testing.T) {
 			EventType: "000_lab_start",
 			Lab:       "l1",
 			Student:   "john.doe",
-			Course:    "cs101",
+			Course:    testCourse,
 		},
 		{
 			Timestamp: td.now.Add(-1 * time.Hour).Unix(),
 			EventType: "100_lab_finish",
 			Lab:       "l1",
 			Student:   "john.doe",
-			Course:    "cs101",
+			Course:    testCourse,
 		},
 	}
 
@@ -148,7 +151,7 @@ func TestGetStudentFinishEvent(t *testing.T) {
 	}
 
 	t.Run("get existing finish event", func(t *testing.T) {
-		got, err := td.store.GetStudentFinishEvent("john.doe", "l1", "cs101")
+		got, err := td.store.GetStudentFinishEvent(testCourse, "l1", "john.doe")
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, entries[1].Timestamp, got.Timestamp)
@@ -156,7 +159,7 @@ func TestGetStudentFinishEvent(t *testing.T) {
 	})
 
 	t.Run("get non-existent event", func(t *testing.T) {
-		got, err := td.store.GetStudentFinishEvent("not.exists", "l1", "cs101")
+		got, err := td.store.GetStudentFinishEvent(testCourse, "l1", "not.exists")
 		require.NoError(t, err)
 		assert.Nil(t, got)
 	})
@@ -169,7 +172,7 @@ func TestScoreOverrideOperations(t *testing.T) {
 	override := models.ScoreOverride{
 		Student: "john.doe",
 		Lab:     "l1",
-		Course:  "cs101",
+		Course:  testCourse,
 		Score:   8,
 		Reason:  "late submission accepted",
 	}
@@ -180,7 +183,7 @@ func TestScoreOverrideOperations(t *testing.T) {
 	})
 
 	t.Run("get override", func(t *testing.T) {
-		got, err := td.store.GetScoreOverride(override.Student, override.Lab, override.Course)
+		got, err := td.store.GetScoreOverride(override.Course, override.Lab, override.Student)
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, override.Score, got.Score)
@@ -188,7 +191,7 @@ func TestScoreOverrideOperations(t *testing.T) {
 	})
 
 	t.Run("list overrides", func(t *testing.T) {
-		overrides, err := td.store.ListScoreOverrides()
+		overrides, err := td.store.ListCourseScoreOverrides(testCourse)
 		require.NoError(t, err)
 		assert.Len(t, overrides, 1)
 		assert.Equal(t, override.Student, overrides[0].Student)
@@ -200,14 +203,14 @@ func TestLabScoreOperations(t *testing.T) {
 	defer cleanup()
 
 	t.Run("get existing score", func(t *testing.T) {
-		score, err := td.store.GetLabScore("l1", "cs101")
+		score, err := td.store.GetLabScore(testCourse, "l1")
 		require.NoError(t, err)
 		require.NotNil(t, score)
 		assert.Equal(t, 10, score.BaseScore)
 	})
 
 	t.Run("get non-existent score", func(t *testing.T) {
-		score, err := td.store.GetLabScore("not.exists", "cs101")
+		score, err := td.store.GetLabScore(testCourse, "not.exists")
 		require.NoError(t, err)
 		assert.Nil(t, score)
 	})
